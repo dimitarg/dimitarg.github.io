@@ -3,7 +3,6 @@ title: "About my job (Part 1/2)"
 date: 2019-09-21T18:00:00Z
 published: true
 categories:
-  - Personal
   - Functional Programming
 tags:
   - misc
