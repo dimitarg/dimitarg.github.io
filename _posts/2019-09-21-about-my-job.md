@@ -68,6 +68,6 @@ It would be easier if we just admitted it:
 > Software sucks. Clearly, we must do better
 
 
-*This is the end of  "About my job (Part 1/2)". Stay tuned for the next installment, where we will discuss how we might go about making software suck less. *
+*This is the end of  "About my job (Part 1/2)". Stay tuned for the next installment, where we will discuss how we might go about making software suck less.*
 
 
