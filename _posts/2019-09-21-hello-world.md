@@ -1,6 +1,6 @@
 ---
 title: "Hello, world!"
-date: 2019-09-21T14:00:00
+date: 2019-09-21T14:00:00Z
 categories:
   - Personal
 ---
