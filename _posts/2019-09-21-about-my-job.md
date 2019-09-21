@@ -40,11 +40,35 @@ One thing I do not necessarily know is *what* software to build. This is usually
 
 # I am a functional programmer
 
-> Wut?
+> You're a what now?
 
 , I hear you say. Alright, let's take a step back.
 
 # Software sucks
 
-I've a bit of a side story from a couple of weeks ago.
+I've a bit of a side story from a couple of weeks ago. I was sitting in my friend's car (hello, Nade!), on the passenger seat, after a particularly satisfying running sesh. The car was at a full stop. Incidentally, we were talking about what it is that I do for a living.
+
+Since the car was at rest, I unbuckled. What happened is that the "no seatbelt" alert system incorrectly trigerred. I'm not sure buckling and unbuckling again made it stop, we might have had to put the car out of contact and back on.
+
+> Did you try turning it off and on again?
+
+Irritating, you might say. Infuriating, say I. Why infuriating?
+
+**Because. It's a fucking car.**
+
+A bug slipped by, it happens, oh well. But how are we to be sure that the software powering the ABS and the ESP is not built by the same people, using the same methodologies? What happens when a bug slips by in those systems?
+
+I'll tell you what happens. You cut some corners here, cut some slack there, and then [Boeing 737 Max](https://en.wikipedia.org/wiki/Boeing_737_MAX_groundings) happens. Real people died, when, in fact, they didn't have to.
+
+> Dude, relax. You're just building a mobile app. If it breaks, people will just top up their electricity at the shop instead.
+
+I disagree. This is a bad mentality and a disaster waiting to happen.
+Software is so pervasive throughout our lives, and we've gotten used to relying on it so much, that nowadays it's really hard to draw the line - which software is critical and which is not?
+
+It would be easier if we just admitted it:
+
+> Software sucks. Clearly, we must do better
+
+
+
 
