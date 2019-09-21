@@ -10,7 +10,7 @@ tags:
   - fp
 ---
 
-In this post, I will attempt to explain, in what hopefully are simple terms, what is it that I do for a living, and why I feel passionate about it. You do not need to be a programmer to follow along this text - it is non-technical.
+In this two-installment post, I will attempt to explain, in what hopefully are simple terms, what is it that I do for a living, and why I feel passionate about it. You do not need to be a programmer to follow along this text - it is non-technical.
 
 # Why?
 
