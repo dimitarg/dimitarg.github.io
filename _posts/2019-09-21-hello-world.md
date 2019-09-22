@@ -4,7 +4,7 @@ date: 2019-09-21T14:00:00Z
 categories:
   - Personal
 tags:
-  - misc
+  - non-techie
 ---
 
 I've been on a short sabbatical of sorts for almost two months now. During that time I completed the [Kom-Emine](https://en.wikipedia.org/wiki/Kom–Emine) mountain trail, had a very short but extremely fun stay at Karadere, wandered around my [hometown](https://www.youtube.com/watch?v=0NZWB1FzkPI) a little bit ...

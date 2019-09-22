@@ -5,7 +5,7 @@ published: true
 categories:
   - Functional Programming
 tags:
-  - misc
+  - non-techie
   - fp
 ---
 
