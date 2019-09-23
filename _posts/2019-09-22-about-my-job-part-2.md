@@ -33,12 +33,25 @@ Oh boy, would you be surprised! Sadly, the answer is - usually, no! **Programmer
 
 What we mostly do instead is we piece the program together, in the hand-wavy manner in which a painter will create a painting - putting a base, then some layers and figures together, and then some finishing touches - all based on "what feels right". We will then (hopefully) test the program a little bit, and if we don't discover glaring defects, we will declare that it looks good as far as we can tell, and be done with it.
 
-So programmers work more like craftsmen than engineers, but then the programs will fail - because we forgot to strictly observe the laws of reality when crafting - which is OK for a Dali piece, but really,a poor way to write a program.
+So programmers work more like artisans or craftsmen than engineers, but then the programs will fail - because we forgot to strictly observe the laws of reality when crafting - which is OK for a Dali piece, but really,a poor way to write a program.
 
 **But why?**
 
 Why did programming get divorced from mathematics? And what do we do to bring them back together?
 To talk about this, we should first make sure we understand what a program really **is**.
 As promised last time, we will do it without technical jargon. Instead, we will draw some pictures.
+
+# The essence of a computer program
+
+An easy way to think about a program is that it takes some sort of input, runs, and when finished provides some output. This is true for all programs, small and large, simple and complex.
+
+Let's look at an example we're all familiar with. The Google auto-complete program takes as input a
+search phrase that you provide to it, runs, and returns a list of the titles of the most relevant
+web pages matching that search term. You've all seen it in action.
+
+![alt text](../assets/images/about-my-job/google_search_initial.jpg "google autocomplete")
+
+
+
 
 
