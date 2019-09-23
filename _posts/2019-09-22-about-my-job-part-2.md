@@ -38,10 +38,10 @@ So programmers work more like artisans or craftsmen than engineers, but then the
 **But why?**
 
 Why did programming get divorced from mathematics? And what do we do to bring them back together?
-To talk about this, we should first make sure we understand what a program really **is**.
-As promised last time, we will do it without technical jargon. Instead, we will draw some pictures.
+To talk about this, we should have a commonly understood, rough picture of what programs are.
+As promised last time, we will do it without technical jargon. Instead, we will ... draw some pictures.
 
-# The essence of a computer program
+# A picture of a computer program
 
 An easy way to think about a program is that it takes some sort of input, runs, and when finished provides some output. This is true for all programs, small and large, simple and complex.
 
@@ -53,7 +53,7 @@ web pages matching that search term. You've all seen it in action.
 
 # Things can go wrong
 
-This is a nice, simple model (model = picture) of the program, but it is quite imprecise, if you think carefully. And that's what programming is all about - thinking carefully.
+This is a nice, simple model of the program. (From now on, I will use the words "picture" and "model" interchangeably). But it's quite imprecise, if you think carefully. And that's what programming is all about - thinking carefully.
 
 Why imprecise? Well, for one, it says nothing about the things that can go wrong. It's important to think about them, since as Murphy's law says, if things can go wrong, at some point, they will.
 
@@ -73,19 +73,19 @@ Let's depict this by putting some more barbed wire, on the output side:
 
 > Panta Rhei
 
-As the world changes, and as the internet gets indexed by the tireless Google robots, search results change, too. If you searched for "current american president" back in 2016, and today, in 2019, you would get back (shockingly) different results.
+As the world changes, and as the internet gets indexed by the tireless Google robots, search results change, too. If you searched for "current american president" back in 2016, and today, in 2019, you would get back different results. Some might say, shockingly different, but we will abstain from commenting.
 
 This has practical consequences. To save computer time, or internet bandwidth, one might decide to save the result of a computer program, so it doesn't have to be run again. Your browser does that all the time under the hood. You might have heard of this - it's called "caching".
 
 Well, in our example, this would be plain wrong! The output of our program depends on what the world is at the current point in time, and, as a consequence, it cannot be cached. Let's depict this by decorating it with a clock:
 
-![alt text](../assets/images/about-my-job/with_clock.jpg "with clock")
+![alt text](../assets/images/about-my-job/with_clock.jpg "program with clock")
 
 
 We might keep refining our picture in greater detail, but let's stop here - you already get the idea.
 What happened is that we took a computer program, and started creating a mental model for it. We began with one that was very simple but too inaccurate. The end result, on the other hand, **reflects reality more closely**. Or at least the parts of reality that we chose to care about:
 - What can go wrong
-- What factors can affect the program output
+- What **external** factors can affect the program output
 
 You can think of the final model as being more *honest* than the initial one.
 
@@ -105,10 +105,26 @@ Here is the final result:
 
 ![alt text](../assets/images/about-my-job/sum.jpg "program that sums numbers")
 
-That's right! There is nothing to refine. In this case, our simple initial model (picture) reflects reality accurately. That's the case because
+That's right! There is nothing to refine. In this case, our simple initial model reflects reality accurately. That's the case because
 - You don't need to contact anybody on the internet to sum numbers, your computer (or phone) is perfectly capable of doing that on its own
-- There's pretty much no way that program can fail at all, save for your device running out of electrical power
+- There's no way the program can fail at all, save for your device running out of electrical power, or something catastrophical happening such as radiation eradicating all electronic devices
 - Summing numbers does not depend on space, time, or the current American president. 3 + 4 is 7 today, was 7 at the time before Euclid was born, and will remain 7 after planet Earth disappears. For all you care, you can safely remember (cache) that 3 + 4 is 7, and never ever have to calculate it again
 
 *One note: since summing numbers is a very simple thing, you might be tempted to think that programs that do not have barbed wire in their pictures are not very interesting. This is not the case - there are plenty of very useful programs that match the simple picture. It's just the variety of life - some programs have all sorts of barbed wire, clocks and bells, and others do not have any at all.*
+
+# Dishonesty leads to divorce
+
+We took quite the detour here, so let's get back to the question at hand - how did programming get divorced with the fine lady that is Mathematics? The answer is dishonesty!
+
+Most programmers, by default, when thinking about programs, and building programs, will use the simple picture to try to describe the programs that have barbed wire and bells and clocks! They will pretend that Model 2 is Model 1, because thinking in terms of the simpler model is, well, simpler. Here is a picture of a programmer doing that:
+
+![alt text](../assets/images/about-my-job/happy_programmer.jpg "a happy, blissful programmer")
+
+And, by Murphy's law, eventually, the following will inevitably happen:
+
+![alt text](../assets/images/about-my-job/sad_user.jpg "a surprised programmer and a sad user")
+
+This blissfully unaware program waiting to blow up cannot be much improved by mathematics. The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established the model, it can help you by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. 
+
+But once your models become dishonest, that is, start to derive too much from reality, you'll inevitably get wrong results; wrong in the sense they will not be what you expected. If you wish to draw an analogy in physics: if you attemt to use newtonian mechanics to study quantum processes, you will fail. 
 
