@@ -51,7 +51,29 @@ web pages matching that search term. You've all seen it in action.
 
 ![alt text](../assets/images/about-my-job/google_search_initial.jpg "google autocomplete")
 
+# Things can go wrong
+
+This is a nice, simple model of the program, but it is quite imprecise, if you think carefully. And that's what programming is all about - thinking carefully.
+
+Why imprecise? Well, for one, it says nothing about the things that can go wrong. It's important to think about them, since as Murphy's law says, if things can go wrong, at some point, they will.
+
+For starters, your internet can get disconnected! In that case the program will never get its input, and there will be no search results. Let's depict this by drawing a barbed wire where the input is:
+
+![alt text](../assets/images/about-my-job/barbed_wire_in.jpg "input with barbed wire")
+
+If you do have internet, and the search query does make it in, Google will send it to its servers for processing. But the server in question might be too busy, overheated, or a rat might have bitten its network cable! Beleive it or not, these things happen every day, simply because Google has thousands upon thousands of those servers. Sooner or later, a rat *will* make it into one of those shiny data centers.
+
+Let's depict this by putting some more barbed wire, on the output side:
 
 
+![alt text](../assets/images/about-my-job/barbed_wire_in_out.jpg "input and output with barbed wire")
 
+
+# Things depend on space and time
+
+> Panta Rhei
+
+As the world changes, and as the internet gets indexed by the tireless Google robots, search results change, too. If you searched for "current american president" back in 2016, and today, in 2019, you would get back (shockingly) different results.
+
+This has practical consequences.
 
