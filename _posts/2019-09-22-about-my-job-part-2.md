@@ -128,7 +128,7 @@ And no wonder! The surprised programmer left out important details out of their 
 - If you fail to think about what can go wrong, of course you will be surprised when it does, and will fail to react
 - If you fail to think about what external factors your output depends on, of course you will be surprised when you get unpredicted output
 
-*For example, in the Boeing 737 Max disaster that I cited last time, the people building the system failed to account for the possibility of a angle-of-attack avionics sensor failing, among many other things. But it turns out those sensors fail often.*
+*For example, in the Boeing 737 Max disaster that I cited last time, the people building the system failed to account for the possibility of a angle-of-attack avionics sensor failing, among many other things. But it turns out those sensors fail often. It's possible lots of barbed wire was missing from their pictures.*
 
 Furthermore, this blissfully unaware program waiting to blow up cannot be much improved by mathematics. The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established what your model is, maths can help you by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. 
 
