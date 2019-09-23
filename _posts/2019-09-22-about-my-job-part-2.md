@@ -136,5 +136,5 @@ Put another way, a mathematical theory is akin to a program. You feed the theory
 
 And that, kids, is how Programming divorced Mathematics.
 
-But don't worry! It gets worse!
+And things will get sligtly worse before they get better. C'est la vie!
 
