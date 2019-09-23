@@ -124,7 +124,11 @@ And, by Murphy's law, eventually, the following will inevitably happen:
 
 ![alt text](../assets/images/about-my-job/sad_user.jpg "a surprised programmer and a sad user")
 
-This blissfully unaware program waiting to blow up cannot be much improved by mathematics. The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established the model, it can help you by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. 
+This blissfully unaware program waiting to blow up cannot be much improved by mathematics. The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established what your model is, maths can help you by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. 
 
-But once your models become dishonest, that is, start to derive too much from reality, you'll inevitably get wrong results; wrong in the sense they will not be what you expected. If you wish to draw an analogy in physics: if you attemt to use newtonian mechanics to study quantum processes, you will fail. 
+Put another way, a mathematical theory is akin to a program. You feed the theory models as its input, the theory has rules and based on those rules you get output that says what the model means, how it behaves, and so on. It's only natural that if you feed in incorrect models, you will get back incorrect results. Incorrect input makes the rules break apart.
+
+And that, kids, is how Programming divorced Mathematics.
+
+But don't worry! It gets worse!
 
