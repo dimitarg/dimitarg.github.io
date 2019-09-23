@@ -128,6 +128,8 @@ And no wonder! The surprised programmer left out important details out of their 
 - If you fail to think about what can go wrong, of course you will be surprised when it does, and will fail to react
 - If you fail to think about what external factors your output depends on, of course you will be surprised when you get unpredicted output
 
+*For example, in the Boeing 737 Max disaster that I cited last time, the people building the system failed to account for the possibility of a angle-of-attack avionics sensor failing, among many other things. But it turns out those sensors fail often.*
+
 Furthermore, this blissfully unaware program waiting to blow up cannot be much improved by mathematics. The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established what your model is, maths can help you by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. 
 
 Put another way, a mathematical theory is akin to a program. You feed the theory models as its input, the theory has rules and based on those rules you get output that says what the model means, how it behaves, and so on. It's only natural that if you feed in incorrect models, you will get back incorrect results. Incorrect input makes the rules break apart.
