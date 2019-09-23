@@ -53,7 +53,7 @@ web pages matching that search term. You've all seen it in action.
 
 # Things can go wrong
 
-This is a nice, simple model of the program, but it is quite imprecise, if you think carefully. And that's what programming is all about - thinking carefully.
+This is a nice, simple model (model = picture) of the program, but it is quite imprecise, if you think carefully. And that's what programming is all about - thinking carefully.
 
 Why imprecise? Well, for one, it says nothing about the things that can go wrong. It's important to think about them, since as Murphy's law says, if things can go wrong, at some point, they will.
 
@@ -75,5 +75,40 @@ Let's depict this by putting some more barbed wire, on the output side:
 
 As the world changes, and as the internet gets indexed by the tireless Google robots, search results change, too. If you searched for "current american president" back in 2016, and today, in 2019, you would get back (shockingly) different results.
 
-This has practical consequences.
+This has practical consequences. To save computer time, or internet bandwidth, one might decide to save the result of a computer program, so it doesn't have to be run again. Your browser does that all the time under the hood. You might have heard of this - it's called "caching".
+
+Well, in our example, this would be plain wrong! The output of our program depends on what the world is at the current point in time, and, as a consequence, it cannot be cached. Let's depict this by decorating it with a clock:
+
+![alt text](../assets/images/about-my-job/with_clock.jpg "with clock")
+
+
+We might keep refining our picture in greater detail, but let's stop here - you already get the idea.
+What happened is that we took a computer program, and started creating a mental model for it. We began with one that was very simple but too inaccurate. The end result, on the other hand, **reflects reality more closely**. Or at least the parts of reality that we chose to care about:
+- What can go wrong
+- What factors can affect the program output
+
+You can think of the final model as being more *honest* than the initial one.
+
+# A simpler program
+
+The Google search engine is a huge and complex beast. But I told you a while ago that programs come great and small. Let's look at a humbler program - it's the program that sums two numbers. You give it the numbers to sum as input, and it presents the sum as an output:
+
+![alt text](../assets/images/about-my-job/sum.jpg "program that sums numbers")
+
+Let's try to refine our picture of this program.
+
+...
+
+...
+
+Here is the final result:
+
+![alt text](../assets/images/about-my-job/sum.jpg "program that sums numbers")
+
+That's right! There is nothing to refine. In this case, our simple initial model (picture) reflects reality accurately. That's the case because
+- You don't need to contact anybody on the internet to sum numbers, your computer (or phone) is perfectly capable of doing that on its own
+- There's pretty much no way that program can fail at all, save for your device running out of electrical power
+- Summing numbers does not depend on space, time, or the current American president. 3 + 4 is 7 today, was 7 at the time before Euclid was born, and will remain 7 after planet Earth disappears. For all you care, you can safely remember (cache) that 3 + 4 is 7, and never ever have to calculate it again
+
+*One note: since summing numbers is a very simple thing, you might be tempted to think that programs that do not have barbed wire in their pictures are not very interesting. This is not the case - there are plenty of very useful programs that match the simple picture. It's just the variety of life - some programs have all sorts of barbed wire, clocks and bells, and others do not have any at all.*
 
