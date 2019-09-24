@@ -142,13 +142,34 @@ And that, kids, is how Programming divorced Mathematics.
 
 And things will get sligtly worse before they get better. C'est la vie!
 
-# A side note
+# A side note - forgiveness!
 
-So far we established that software sucks, that it does so because it ignores its natural roots in mathematics, and that it ignores them by being dishonest about what is what. At this point you might think that we programmers are a reckless and careless bunch.  
+*So far we established that software sucks, that it does so because it ignores its natural roots in mathematics, and that it ignores them by being dishonest about what is what. At this point you might think that we programmers are a reckless and careless bunch.*  
 
-In our defense, a craftsman is shaped by their tools. This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf) [our](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html) thinking. The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences.
+*In our defense, a craftsman is shaped by their tools. This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf) [our](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html) thinking. The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this damage.*
 
-# Dishonesty breaks composition
+# On composition
 
 Composition is the process by which the individual parts come together to form a cohesive whole. It is all around us:
+- The notes, the pauses, the timbre, the arrangement, the indivuduality of the artist come together to compose a live musical piece
+- The particles come together to compose chemicals, compounds, tissues and living organisms
+- The individual engagements and pastime activities, when arranged well, come together to compose a satisfying daily schedule
+
+Notice that composition always happens according to some rules. You cannot create music by putting together arbitrary sounds, and life by putting together arbitrary particles. A completely hectic and unprincipled daily schedule is also not likely to be satisfying.
+
+# Building software necessitates composition
+
+In fact, composition is the essence of building software, because the programs are always composed of smaller programs, all the way down to the zeroes and ones that your computer, phone, or smart watch understands. In a sense, all programmers do is compose small pieces into bigger and bigger ones, until they are able to solve their current task.
+
+Let's go back to our Google search program. We represented it in a picture with a single box. Did Google spend millions of dollars and man-hours to build a single box? Yes and no. If you look closer, it's more like this:
+
+![alt text](../assets/images/about-my-job/search_engine_decomposed.jpg "search engine decomposed")
+
+You can imagine that the boxes themselves are composed of smaller ones, and so forth, until we reach the smallest programs, such as the one that sums two numbers.
+
+This picture is incomplete. The individual pieces interact together. They collaborate together to produce the final output of the program:
+
+![alt text](../assets/images/about-my-job/search_engine_interactions.jpg "search engine interactions")
+
+
 
