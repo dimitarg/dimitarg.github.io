@@ -31,9 +31,11 @@ just applied mathematics](https://xkcd.com/435/) if you look under the hood.
 
 Oh boy, would you be surprised! Sadly, the answer is - usually, no! **Programmers rarely follow the rules of mathematics when they design programs.** I think this is the primary reason most programs fail.
 
-What we mostly do instead is we piece the program together, in the hand-wavy manner in which a painter will create a painting - putting a base, then some layers and figures together, and then some finishing touches - all based on "what feels right". We will then (hopefully) test the program a little bit, and if we don't discover glaring defects, we will declare that it looks good as far as we can tell, and be done with it.
+What we mostly do instead is we piece the program together in the intuition-driven manner in which, say, a painter will create a painting - starting with a vague idea in our head, then draft a rough sketch, then gradually add aspects, and details, and finishing touches - all based on what *feels* right. Note that this process will still require a lot of skill, but is almost entirely driven by feeling and experience, as opposed to some hard, formal science.
 
-So programmers work more like artisans or craftsmen than engineers, but then the programs will fail - because we forgot to strictly observe the laws of reality when crafting - which is OK for a Dali piece, but really,a poor way to write a program.
+We will then, *hopefully*, test the program a little bit, and if we don't discover glaring defects, we will declare that it looks good as far as we can tell, and be done with it.
+
+So programmers work more like artisans or craftsmen than engineers, but then the programs will fail - because we forgot to strictly observe the laws of reality when crafting - which is good for a Dali piece, but really, a poor way to write a program.
 
 **But why?**
 
@@ -61,7 +63,7 @@ For starters, your internet can get disconnected! In that case the program will 
 
 ![alt text](../assets/images/about-my-job/barbed_wire_in.jpg "input with barbed wire")
 
-If you do have internet, and the search query does make it in, Google will send it to its servers for processing. But the server in question might be too busy, overheated, or a rat might have bitten its network cable! Beleive it or not, these things happen every day, simply because Google has thousands upon thousands of those servers. Sooner or later, a rat *will* make it into one of those shiny data centers.
+If you do have internet, and the search query does make it in, Google will send it to its servers for processing. But the server in question might be too busy, overheated, or a rat might have bitten its network cable! Beleive it or not, these things happen every day, because Google has thousands upon thousands of those servers. Sooner or later, a rat *will* make it into one of those shiny data centers.
 
 Let's depict this by putting some more barbed wire, on the output side:
 
@@ -75,15 +77,16 @@ Let's depict this by putting some more barbed wire, on the output side:
 
 As the world changes, and as the internet gets indexed by the tireless Google robots, search results change, too. If you searched for "current american president" back in 2016, and today, in 2019, you would get back different results. Some might say, shockingly different, but we will abstain from commenting.
 
-This has practical consequences. To save computer time, or internet bandwidth, one might decide to save the result of a computer program, so it doesn't have to be run again. Your browser does that all the time under the hood. You might have heard of this - it's called "caching".
+This has practical consequences. To save computer time, or internet bandwidth, one might decide to remember the result of a computer program, so it doesn't have to be run again. Your browser does that all the time under the hood. You might have heard of this - it's called "caching".
 
-Well, in our example, this would be plain wrong! The output of our program depends on what the world is at the current point in time, and, as a consequence, it cannot be cached. Let's depict this by decorating it with a clock:
+Well, in our example, this would be plain wrong! The output of our program depends on what the world is at the current point in time! As a consequence, it cannot be cached. Let's depict this by decorating it with a clock:
 
 ![alt text](../assets/images/about-my-job/with_clock.jpg "program with clock")
 
 
 We might keep refining our picture in greater detail, but let's stop here - you already get the idea.
-What happened is that we took a computer program, and started creating a mental model for it. We began with one that was very simple but too inaccurate. The end result, on the other hand, **reflects reality more closely**. Or at least the parts of reality that we chose to care about:
+What happened is that we took a computer program, and started creating a mental model for it. We began with one that was very simple, but too inaccurate. The end result, on the other hand, **reflects reality more closely**. Or at least the parts of reality that we chose to care about:
+
 - What can go wrong
 - What **external** factors can affect the program output
 
@@ -106,15 +109,16 @@ Here is the final result:
 ![alt text](../assets/images/about-my-job/sum.jpg "program that sums numbers")
 
 That's right! There is nothing to refine. In this case, our simple initial model reflects reality accurately. That's the case because
-- You don't need to contact anybody on the internet to sum numbers, your computer (or phone) is perfectly capable of doing that on its own
+
+- You don't need to contact anything on the internet to sum numbers, your computer (or phone) is perfectly capable of doing that on its own
 - There's no way the program can fail at all, save for your device running out of electrical power, or something catastrophical happening such as radiation eradicating all electronic devices
-- Summing numbers does not depend on space, time, or the current American president. 3 + 4 is 7 today, was 7 at the time before Euclid was born, and will remain 7 after planet Earth disappears. For all you care, you can safely remember (cache) that 3 + 4 is 7, and never ever have to calculate it again
+- Summing numbers does not depend on space, time, or the current American president. 3 + 4 is 7 today, was, and will be, forevermore. For all you care, you can safely remember (cache) that 3 + 4 is 7, and never need to calculate it again
 
 *One note: since summing numbers is a very simple thing, you might be tempted to think that programs that do not have barbed wire in their pictures are not very interesting. This is not the case - there are plenty of very useful programs that match the simple picture. It's just the variety of life - some programs have all sorts of barbed wire, clocks and bells, and others do not have any at all.*
 
 # Dishonesty leads to divorce
 
-We took quite the detour here, so let's get back to the question at hand - how did programming get divorced with the fine lady that is Mathematics? The answer is dishonesty!
+We took quite the detour to discuss what programs are. Let's get back to the question at hand - how did programming get divorced from the fine lady that is Mathematics? The answer is: dishonesty!
 
 Most programmers, by default, when thinking about programs, and building programs, will use the simple picture to try to describe the programs that have barbed wire and bells and clocks! They will pretend that Model 2 is Model 1, because thinking in terms of the simpler model is, well, simpler. Here is a picture of a programmer doing that:
 
@@ -124,9 +128,9 @@ And, by Murphy's law, eventually, the following will inevitably happen:
 
 ![alt text](../assets/images/about-my-job/sad_user.jpg "a surprised programmer and a sad user")
 
-And no wonder! The surprised programmer left out important details out of their picture, and the sadness of the user is to be expected:
+And no wonder! The now surprised programmer left out important details out of their picture, and the sadness of the user is to be expected:
 - If you fail to think about what can go wrong, of course you will be surprised when it does, and will fail to react
-- If you fail to think about what external factors your output depends on, of course you will be surprised when you get unpredicted output
+- If you fail to think about what external factors your output depends on, of course you will be surprised to get unpredicted output
 
 *For example, in the Boeing 737 Max disaster that I cited last time, the people building the system failed to account for the possibility of a angle-of-attack avionics sensor failing, among many other things. But it turns out those sensors fail often. It's possible lots of barbed wire was missing from their pictures.*
 
@@ -137,4 +141,14 @@ Put another way, a mathematical theory is akin to a program. You feed the theory
 And that, kids, is how Programming divorced Mathematics.
 
 And things will get sligtly worse before they get better. C'est la vie!
+
+# A side note
+
+So far we established that software sucks, that it does so because it ignores its natural roots in mathematics, and that it ignores them by being dishonest about what is what. At this point you might think that we programmers are a reckless and careless bunch.  
+
+In our defense, a craftsman is shaped by their tools. This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf) [our](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html) thinking. The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences.
+
+# Dishonesty breaks composition
+
+Composition is the process by which the individual parts come together to form a cohesive whole. It is all around us:
 
