@@ -165,11 +165,78 @@ Let's go back to our Google search program. We represented it in a picture with 
 
 ![alt text](../assets/images/about-my-job/search_engine_decomposed.jpg "search engine decomposed")
 
-You can imagine that the boxes themselves are composed of smaller ones, and so forth, until we reach the smallest programs, such as the one that sums two numbers.
+You might expect that these boxes themselves are composed of smaller ones, and so forth, until we reach the smallest programs, such as the one that sums two numbers. That's correct.
 
-This picture is incomplete. The individual pieces interact together. They collaborate together to produce the final output of the program:
+This picture is incomplete though. The individual pieces interact together. They collaborate together to produce the final output of the program:
 
 ![alt text](../assets/images/about-my-job/search_engine_interactions.jpg "search engine interactions")
+
+(The final output is, as usual, depicted with an arrow going out of the big box. I've painted it thick to differentiate it from the arrows between the small boxes.)
+
+And, as we said, there need to be rules as to how things interact and come together. *You can't just throw sounds together and expect Carmen.* 
+
+Once you have defined the individual boxes, and know what the composition rules are, all is good. The final output of the program is determined by the boxes, the arrows, and the rules.
+
+# Composition needs the barbed wire
+
+I promised the divorce was going to get worse, and here is where it does.
+
+Think about it. We need rules to know where we can put arrows, and what those arrows do - how they affect the final output. But the arrows go *between two boxes*. What, in part, **determines** and arrow, is what box it goes out of, and what box it goes into.
+
+And so, if you fail to be honest about what each box really *is*, you can't say what the arrows are either! The rules break apart again, but this part at a larger scale.
+
+Software sucks because it looks like this:
+
+**TODO add picture**
+
+The waviness of the arrows above represents we're uncertain what they do. Since the output of the big box is determined by the arrows inside, we are also uncertain of the output. 
+
+Because boxes are made of smaller boxes, the bigger a software system gets, and the more levels of boxes it has, the more uncertain we are of the output. This explains why engineers have been able to devise bigger and bigger buildings and machines that do not fall apart. We programmers have also been tasked with delivering systems more and more complex, but have systematically failed to deliver ones that work correctly.
+
+# Winning mathematics back
+
+I am a functional programmer. When tasked with solving a problem, I do the following:
+
+- I break down the problem into small problems, and the small problems into smaller ones, until the problems are small enough to solve easily
+- I draw this "break down" as boxes
+- I make sure to carefully put the sorts of barbed wire and bells each box needs.
+- I connect the boxes with arrows as needed to make them interact together to deliver the final output
+
+The end result looks like this:
+
+**TODO add picture**
+
+Note the roundy things on each arrow in the picture. Those depict rules - the composition rules I was telling you about. The same sort of rules you will find in a mathematical textbook - the ones which allow engineers to create buildings that do not fall apart.
+
+The rules tell me what the arrows mean, and ultimately, what the final output can and cannot possibly be.
+
+The best thing is I do not have to come up with the rules! I get them for free from mathematics, so long as I've been careful to put the barbed wires wherever they are needed.
+
+Here is an example of one such rule. It's a very common rule and I use it every day. It's called *associativity*:
+
+**TODO add picture**
+
+`x+(y+z) = x+(y+z)` will be familiar to you from high school. What this says is I can 
+- put together the first and the second box, and then put that together with the third box
+- put together the second and the third box, and then put the first box together with that
+
+No matter which of the two ways I go, I will get back the same output. This might not sound like much, but even this simple rule is not true if you forget to put the barbed wire, and your arrows are wavy. Even the simplest rules break down if you aren't honest!
+
+# That's my job!
+
+That's my job! I put barbed wire, I compose things, and try to do it in such a way that we can use more and more of these mathemathical rules, so we can become more certain of the output of our systems.
+
+We functional programmers are trying to slowly win mathematics back. It's a long way from divorce to "happily ever after", but we are a persistent bunch! As I said in the beginning of this story, it matters! It's important that we do better.
+
+Oh, and besides putting all that wire, I have fun! Composing music is fun, but so is composing programs. Musicians shouldn't get *all* the fun.
+
+I will say goodbye with an aphorisms of sorts. You will hear some people say that functional programming is too theoretical. That's not true. The hard and theoretical part is the job of the mathematicians. It is them that make the rules, and sometimes it is them that help us out with which rules to use. We just apply the rules! 
+
+> Functional programming is the applied discipline of making sure software sucks less.
+
+There ya go!
+
+
 
 
 
