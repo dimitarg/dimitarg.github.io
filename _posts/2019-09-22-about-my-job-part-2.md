@@ -37,7 +37,7 @@ What we mostly do instead is we piece the program together in the intuition-driv
 
 We will then, *hopefully*, test the program a little bit, and if we don't discover glaring defects, we will declare that it looks good as far as we can tell, and be done with it.
 
-So programmers work more like artisans or craftsmen than engineers, but then the programs will fail - because we forgot to strictly observe the laws of reality when crafting - which is good for a Dali piece, but really, a poor way to write a program.
+So programmers work more like artisans or craftspeople than engineers, but then the programs will fail - because we forgot to strictly observe the laws of reality when crafting - which is good for a Dali piece, but really, a poor way to write a program.
 
 **But why?**
 
@@ -47,11 +47,9 @@ As promised last time, we will do it without technical jargon. Instead, we will 
 
 # A picture of a computer program
 
-An easy way to think about a program is that it takes some sort of input, runs, and when finished provides some output. This is true for all programs, small and large, simple and complex.
+An easy way to think about a program is that it takes some sort of **input**, runs, and when finished provides some **output**. This is true for all programs, small and large, simple and complex.
 
-Let's look at an example we're all familiar with. The Google auto-complete program takes as input a
-search phrase that you provide to it, runs, and returns a list of the titles of the most relevant
-web pages matching that search term. You've all seen it in action.
+Let's look at an example we're all familiar with: the Google auto-complete program. You provide a search phrase as input, the program executes, and returns a list of the most relevant document titles as output. You've all seen it in action:
 
 ![alt text](../assets/images/about-my-job/google_search_initial.jpg "google autocomplete")
 
@@ -79,9 +77,9 @@ Let's depict this by putting some more barbed wire, on the output side:
 
 As the world changes, and as the internet gets indexed by the tireless Google robots, search results change, too. If you searched for "current american president" back in 2016, and today, in 2019, you would get back different results. Some might say, shockingly different, but we will abstain from commenting.
 
-This has practical consequences. To save computer time, or internet bandwidth, one might decide to remember the result of a computer program, so it doesn't have to be run again. Your browser does that all the time under the hood. You might have heard of this - it's called "caching".
+This has practical consequences. To save computer time, or internet bandwidth, one might decide to remember the result of a computer program, so it doesn't have to be run again. Your browser does that all the time under the hood - this is the process known as "caching".
 
-Well, in our example, this would be plain wrong! The output of our program depends on what the world is at the current point in time! As a consequence, it cannot be cached. Let's depict this by decorating it with a clock:
+Well, in our example, caching would be plain wrong! The output of our program depends on what the world is at the current point of time! As a consequence, it cannot be cached. Let's depict this by decorating it with a clock:
 
 ![alt text](../assets/images/about-my-job/with_clock.jpg "program with clock")
 
@@ -96,7 +94,7 @@ You can think of the final model as being more *honest* than the initial one.
 
 # A simpler program
 
-The Google search engine is a huge and complex beast. But I told you a while ago that programs come great and small. Let's look at a humbler program - it's the program that sums two numbers. You give it the numbers to sum as input, and it presents the sum as an output:
+The Google search engine is a huge and complex beast. But I told you a while ago that programs come great and small. Let's look at a humbler program - it's the program that sums two numbers. You give it two numbers as input, and it outputs the sum of them:
 
 ![alt text](../assets/images/about-my-job/sum.jpg "program that sums numbers")
 
@@ -126,7 +124,7 @@ Most programmers, by default, when thinking about programs, and building program
 
 ![alt text](../assets/images/about-my-job/happy_programmer.jpg "a happy, blissful programmer")
 
-And, by Murphy's law, eventually, the following will inevitably happen:
+And, by Murphy's law, eventually, the inevitable happen:
 
 ![alt text](../assets/images/about-my-job/sad_user.jpg "a surprised programmer and a sad user")
 
@@ -136,46 +134,50 @@ And no wonder! The now surprised programmer left out important details out of th
 
 *For example, in the Boeing 737 Max disaster that I cited last time, the people building the system failed to account for the possibility of a angle-of-attack avionics sensor failing, among many other things. But it turns out those sensors fail often. It's possible lots of barbed wire was missing from their pictures.*
 
-Furthermore, this blissfully unaware program waiting to blow up cannot be much improved by mathematics. The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established what your model is, maths can help you by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. 
+Furthermore, this blissfully unaware program waiting to blow up cannot be much improved by mathematics.
 
-Put another way, a mathematical theory is akin to a program. You feed the theory models as its input, the theory has rules and based on those rules you get output that says what the model means, how it behaves, and so on. It's only natural that if you feed in incorrect models, you will get back incorrect results. Incorrect input makes the rules break apart.
+Why? The thing about mathematics is that it works with models, just like the pictures we draw here. Once you have established what your model is, maths can help by giving you hard, rock-solid rules of how the pieces in the model interact together, and what the final result can and cannot be. Put another way, a mathematical theory is akin to a program. You feed the theory models as its input, the theory has rules and based on those rules you get output that says what the model means, how it behaves, and so on.
+
+But our model was wrong - we imagined sun and flowers where there was barbed wire. It's only natural that if you feed in incorrect models, you will get back incorrect results. Incorrect input makes the rules break apart.
 
 And that, kids, is how Programming divorced Mathematics.
 
-And things will get sligtly worse before they get better. C'est la vie!
+Now, things will get sligtly worse before they get better. C'est la vie!
 
 # A side note - forgiveness!
 
 *So far we established that software sucks, that it does so because it ignores its natural roots in mathematics, and that it ignores them by being dishonest about what is what. At this point you might think that we programmers are a reckless and careless bunch.*  
 
-*In our defense, a craftsman is shaped by their tools. This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf) [our](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html) thinking. The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this damage.*
+*In our defense, a craftsman is shaped by their tools. In our case - programming languages, the tools which we use to create programs.
+
+This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes our thinking](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf). The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this, as Dijkstra bluntly calls it, [mental damage](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html).*
 
 # On composition
 
 Composition is the process by which the individual parts come together to form a cohesive whole. It is all around us:
-- The notes, the pauses, the timbre, the arrangement, the indivuduality of the artist come together to compose a live musical piece
+- The notes, the pauses, the timbre, the arrangement, the indivuduality and feelings of the artist come together to compose a live musical piece
 - The particles come together to compose chemicals, compounds, tissues and living organisms
 - The individual engagements and pastime activities, when arranged well, come together to compose a satisfying daily schedule
 
-Notice that composition always happens according to some rules. You cannot create music by putting together arbitrary sounds, and life by putting together arbitrary particles. A completely hectic and unprincipled daily schedule is also not likely to be satisfying.
+Notice that, in each case, composition happens according to some **rules**. You cannot create music by putting together arbitrary sounds, and life by putting together arbitrary particles. A completely hectic and unprincipled daily schedule is also not likely to be satisfying.
 
 # Building software necessitates composition
 
-In fact, composition is the essence of building software, because the programs are always composed of smaller programs, all the way down to the zeroes and ones that your computer, phone, or smart watch understands. In a sense, all programmers do is compose small pieces into bigger and bigger ones, until they are able to solve their current task.
+In fact, composition is the essence of building software, because the programs are always composed of smaller programs, and the smaller of yet smaller ones, all the way down to the zeroes and ones that your computer, phone, or smart watch understands. In a sense, all programmers do is compose small pieces into bigger ones, until they make up a box able to solve their current task.
 
-Let's go back to our Google search program. We represented it in a picture with a single box. Did Google spend millions of dollars and man-hours to build a single box? Yes and no. If you look closer, it's more like this:
+Let's go back to our Google search program. We represented it by a picture with a single box. Did Google spend millions of dollars and hours to build a single box? Yes and no. If you look closer, it's more like this:
 
 ![alt text](../assets/images/about-my-job/search_engine_decomposed.jpg "search engine decomposed")
 
 You might expect that these boxes themselves are composed of smaller ones, and so forth, until we reach the smallest programs, such as the one that sums two numbers. That's correct.
 
-This picture is incomplete though. The individual pieces interact together. They collaborate together to produce the final output of the program:
+This picture is incomplete, though. The individual pieces interact together. They collaborate together to produce the final output of the program:
 
 ![alt text](../assets/images/about-my-job/search_engine_interactions.jpg "search engine interactions")
 
-(The final output is, as usual, depicted with an arrow going out of the big box. I've painted it thick to differentiate it from the arrows between the small boxes.)
+(The final output is, as usual, depicted with an arrow going out of the big box. I've painted it thick to distinguish it from the arrows between the small boxes.)
 
-And, as we said, there need to be rules as to how things interact and come together. *You can't just throw sounds together and expect Carmen.* 
+And, as we said, there need to be rules as to how things interact and come together - rules attached to the arrows. *You can't just throw sounds together and expect Carmen, right?* 
 
 Once you have defined the individual boxes, and know what the composition rules are, all is good. The final output of the program is determined by the boxes, the arrows, and the rules.
 
@@ -183,7 +185,7 @@ Once you have defined the individual boxes, and know what the composition rules 
 
 I promised the divorce was going to get worse, and here is where it does.
 
-Think about it. We need rules to know where we can put arrows, and what those arrows do - how they affect the final output. But the arrows go *between two boxes*. What, in part, **determines** and arrow, is what box it goes out of, and what box it goes into.
+Think about it. We need rules to know where we can put arrows, and what those arrows do - how they affect the final output. But an arrow goes *between two boxes*. An arrow is described, among other things, by *what box it goes out of, and what box it goes into*.
 
 And so, if you fail to be honest about what each box really *is*, you can't say what the arrows are either! The rules break apart again, but this part at a larger scale.
 
