@@ -9,8 +9,6 @@ tags:
   - fp
 ---
 
-**This post is a draft, I'm still writing it. Just testing in production, move along :) **
-
 [Last time](../about-my-job), we established that software sucks, and that we must do better.
 We must do better, because when computer programs fail, what is at stake is real people's time, money,
 well-being, or worse, their lives.
