@@ -191,7 +191,7 @@ And so, if you fail to be honest about what each box really *is*, you can't say 
 
 Software sucks because it looks like this:
 
-![alt text](../assets/images/about-my-job/wavy_arrows.jpg" "wavy arrows")
+![alt text](../assets/images/about-my-job/wavy_arrows.jpg "wavy arrows")
 
 The waviness of the arrows above represents we're uncertain what they do. Since the output of the big box is determined by the arrows inside, we are also uncertain of the output. 
 
@@ -208,7 +208,7 @@ I am a functional programmer. When tasked with solving a problem, I do the follo
 
 The end result looks like this:
 
-![alt text](../assets/images/about-my-job/arrows_with_rules.jpg" "arrows and rules")
+![alt text](../assets/images/about-my-job/arrows_with_rules.jpg "arrows and rules")
 
 
 Note the roundy things on each arrow in the picture. Those depict rules - the composition rules I was telling you about. The same sort of rules you will find in a mathematical textbook - the ones which allow engineers to create buildings that do not fall apart.
@@ -219,7 +219,7 @@ The best thing is I do not have to come up with the rules! I get them for free f
 
 Here is an example of one such rule. It's a very common rule and I use it every day. It's called *associativity*:
 
-![alt text](../assets/images/about-my-job/associativity.jpg" "associativity")
+![alt text](../assets/images/about-my-job/associativity.jpg "associativity")
 
 `(x+y)+z = x+(y+z)` will be familiar to you from high school. What this says is I can 
 - put together the first and the second box, and then put that together with the third box
