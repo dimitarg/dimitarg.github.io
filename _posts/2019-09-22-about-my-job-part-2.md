@@ -11,7 +11,7 @@ tags:
 
 **This post is a draft, I'm still writing it. Just testing in production, move along :) **
 
-[Last time](2019-09-21-about-my-job.md), we established that software sucks, and that we must do better.
+[Last time](../about-my-job), we established that software sucks, and that we must do better.
 We must do better, because when computer programs fail, what is at stake is real people's time, money,
 well-being, or worse, their lives.
 
