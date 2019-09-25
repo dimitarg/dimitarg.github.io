@@ -53,7 +53,7 @@ Let's look at an example we're all familiar with. The Google auto-complete progr
 search phrase that you provide to it, runs, and returns a list of the titles of the most relevant
 web pages matching that search term. You've all seen it in action.
 
-![alt text](../assets/images/about-my-job/google_search_initial.jpg "google autocomplete")
+![alt text](../../assets/images/about-my-job/google_search_initial.jpg "google autocomplete")
 
 # Things can go wrong
 
