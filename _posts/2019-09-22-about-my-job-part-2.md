@@ -1,13 +1,15 @@
 ---
 title: "About my job (Part 2/2)"
 date: 2019-09-22T13:30:00Z
-published: false
+published: true
 categories:
   - Functional Programming
 tags:
   - non-techie
   - fp
 ---
+
+**This post is a draft, I'm still writing it. Just testing in production, move along :) **
 
 [Last time](2019-09-21-about-my-job.md), we established that software sucks, and that we must do better.
 We must do better, because when computer programs fail, what is at stake is real people's time, money,
