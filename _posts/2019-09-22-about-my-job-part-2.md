@@ -148,9 +148,9 @@ Now, things will get sligtly worse before they get better. C'est la vie!
 
 *So far we established that software sucks, that it does so because it ignores its natural roots in mathematics, and that it ignores them by being dishonest about what is what. At this point you might think that we programmers are a reckless and careless bunch.*  
 
-*In our defense, a craftsman is shaped by their tools. In our case - programming languages, the tools which we use to create programs.
+*In our defense, a craftsman is shaped by their tools. In our case - programming languages, the tools which we use to create programs.*
 
-This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes our thinking](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf). The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this, as Dijkstra bluntly calls it, [mental damage](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html).*
+*This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes our thinking](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf). The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this, as Dijkstra bluntly calls it, [mental damage](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html).*
 
 # On composition
 
