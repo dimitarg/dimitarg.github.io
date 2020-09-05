@@ -43,7 +43,7 @@ And I think there's no good reasons we do that, besides inertia and the status q
 
 # Enter pure testing
 
-Fortunately, there now exists a testing library called [weaver-test](https://disneystreaming.github.io/weaver-test/) which allows us to test in a referentially transparent manner. 
+There exists a testing library called [weaver-test](https://disneystreaming.github.io/weaver-test/) which allows us to test in a referentially transparent manner. 
 
 That is, a test it a function which returns a value of type `Expectations` indicating whether the test succeeded or not:
 
@@ -59,9 +59,28 @@ In addition, tests in general are allowed to peform `IO`, and so a test in gener
 someTest: IO[Expectations]
 ```
 
+> Side note: yet more generally, a test has type `F[Expectations]` for some type `F` from the `cats-effect` type hierarchy. In practice, that `F` is constrained to `ConcurrentEffect`. Since `ConcurrentEffect` is "morally `IO`", we will skip ceremonies, and postulate that a test has type `IO[Expectations]`.
+
 This means that even if the code under test, or the test setup code is in `IO` (or some transformer stack containing `IO`), we don't have to resort to `unsafeRunX` in order to write the test, and that we can compose test values via `IO`, as well as via the applicative / monadic / monoidal structure of `Expectations` itself.
 
 That is to say, we can now write test code the same way we write any other code - via the tools of functional programming! 
 
 If you're a haskell programmer, your reaction at this point probably is "well, yeah." But for Scala, I think this is a game changer, and I hope you're as excited about this as I am!
 
+
+## Short digression - going the last mile
+
+While tests in `weaver-test` are values, when using the default API, *making sure* a test is executed is side effectful. What we mean by this is that in the following snippet:
+
+```scala
+test("some test") {
+  doSomething >>
+    expect(42 == 42)
+}
+```
+
+, `test` has type
+
+```scala
+def test(name: String)(run: IO[Expectations]): Unit
+```
