@@ -45,7 +45,7 @@ And I think there's no good reasons we do, besides inertia and the status quo of
 
 There exists a testing library called [weaver-test](https://disneystreaming.github.io/weaver-test/) which allows us to test in a referentially transparent manner. 
 
-> Note: `weaver-test` is built on top of `cats-effect` and `fs2`. If you're using `zio`, consider looking at [`zio-test`](https://zio.dev/docs/usecases/usecases_testing).
+> Note: `weaver-test` is built on top of `cats-effect` and `fs2`. If you're using `zio`, it has a module for `zio` integration; that being said, you should also consider looking at [`zio-test`](https://zio.dev/docs/usecases/usecases_testing).
 
 That is, a test it a function which returns a value of type `Expectations` indicating whether the test succeeded or not:
 
@@ -390,3 +390,9 @@ ignored("too lazy to fix")(test("this will fail"){
 ```
 
 The list goes on. The point being, since we work in `IO`, and `Expectations` is just data, we can manipulate individual tests any way we like.
+
+# Manipulating suite values
+
+# "Test fixtures"
+
+# Recap
