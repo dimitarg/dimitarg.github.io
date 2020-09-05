@@ -24,11 +24,6 @@ done via side effects and shared mutable state;
 - Put more generally, tests are not **values**.
 
 
-In this article, I will
-- Make the claim that this is not just a niusance, but a real problem;
-- Show that can do better - that people have already done better, and there exists no good reasons to continue writing tests that are not values;
-- Give plenty of code examples using a specific library
-
 # Why is this a big deal?
 
 1. By sacrificing referential transparency in tests, we lose the productivity gains coming from functional programming. In general, we can no longer reason
@@ -38,15 +33,35 @@ equationally, or apply the substitution principle when refactoring. Worst of all
 shifting, wasting time and energy - for no good reason other than "scalatest / x insists we do that".
 
 3. Since we have already committed that our production code is pure, we are now forced
-to test pure code in an impure testing language. This creates an impedance mismatch which at the very least manifests as `unsafeRunX` all over the place.
-The mismatch becomes especially apparent, ugly and boilerplate-prone once you try do something more complicated, such as share resources across multiple tests or test suites.
+to test pure code in an impure testing language. This creates an impedance mismatch which at the very least manifests as `unsafeRunX` all over the place. The mismatch becomes especially apparent, ugly and boilerplate-prone once you try do something more complicated, such as share resources across multiple tests or test suites; deal with a `cats.effect.Resource` in a `beforeAll` / `afterAll` setup, bootstrap and shutdown a whole `IOApp` safely and without leaking resources within a given testing scope, etc.
 
 4. By admitting that production code must be pure, but it's okay for tests to rely on side effects, we give tests a status of a second-class citizen.
 
-Think about the last point for a while.
+The last point is worth reiterating - it doesn't make sense to lower our standards when it comes to the code that establishes the correctness of our programs; but we still allow ourselves to do that. 
 
-It's silly! How come we are allowed to lower our standards when it comes to the code that establishes the correctness of our programs?
+And I think there's no good reasons we do that, besides inertia and the status quo of popular tools.
 
-I'm convinced it makes no sense to do so, and there exist 0 reasons to continue doing so, apart from inertia.
+# Enter pure testing
 
+Fortunately, there now exists a testing library called [weaver-test](https://disneystreaming.github.io/weaver-test/) which allows us to test in a referentially transparent manner. 
+
+That is, a test it a function which returns a value of type `Expectations` indicating whether the test succeeded or not:
+
+```scala
+case class Expectations(val run: ValidatedNel[AssertionException, Unit])
+```
+
+`Expectations` forms two monoids via `and` and `or` semantics, and can additionally be manipulated via the structure of `Validated` / `ValidatedNel`.
+
+In addition, tests in general are allowed to peform `IO`, and so a test in general has type 
+
+```scala
+someTest: IO[Expectations]
+```
+
+This means that even if the code under test, or the test setup code is in `IO` (or some transformer stack containing `IO`), we don't have to resort to `unsafeRunX` in order to write the test, and that we can compose test values via `IO`, as well as via the applicative / monadic / monoidal structure of `Expectations` itself.
+
+That is to say, we can now write test code the same way we write any other code - via the tools of functional programming! 
+
+If you're a haskell programmer, your reaction at this point probably is "well, yeah." But for Scala, I think this is a game changer, and I hope you're as excited about this as I am!
 
