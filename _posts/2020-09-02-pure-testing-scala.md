@@ -79,8 +79,11 @@ test("some test") {
 }
 ```
 
-, `test` has type
+, the function `test` has type
 
 ```scala
 def test(name: String)(run: IO[Expectations]): Unit
 ```
+, where `Unit` indicates that a side effect is performed in order to register the passed test value with the framework.
+
+This however is just a trait of the default `Suite` API and not inherent to the programming model. So I wrote a micro-library [`weaver-test-extra`](https://github.com/dimitarg/weaver-test-extra) overcoming that problem. We will be using this library in addition to `weaver-test` in all the below examples. The library contains [nearly no code](https://github.com/dimitarg/weaver-test-extra/tree/60523cbe2fd58347ce3ab4fa5566a7f273dc9dd2/src/main/scala/weaver/pure) - you could write it yourself if you wanted.
