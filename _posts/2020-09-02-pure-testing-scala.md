@@ -146,6 +146,7 @@ Here we need no such environment, i.e. in our case `R=Unit`. We use the function
 ```scala
 def test(name: String)(run: IO[Expectations]): RTest[Unit] = ???
 ```
+## Stream
 
 Let's now get back to the type of a suite, `fs2.Stream[IO,RTest[A]]`. This says that a suite is a `fs2.Stream` of tests. 
 
@@ -194,6 +195,121 @@ implicit def expectationsConversion(e: Expectations): IO[Expectations] =
 
 The same code exists in vanilla `weaver-test`. This is so that you can write effecful and non-effectful tests the same way. 
 
-I am not fully convinced this is great. At the very least it's a pedagogical problem, since an explanation was needed.
+I am not fully convinced this is great. At the very least it's a pedagogical problem, since an explanation was needed. And it does smell a bit dynamically typed.
 
 An alternative would be provide two separate functions, say `test` and `testM`, for declaring non-effectful and effectful tests. This is the approach `zio-test` takes, and one that `weaver-test-extra` might adopt in an upcoming version.
+
+# Composing test values
+
+As we pointed out, since tests are just values, we can compose and manipulate them in the usual ways.
+
+Let's write a library function taking a list of expectations, and returning an expectation which passes if all the given expecations pass:
+
+```scala
+import cats.implicits._
+import cats.data.NonEmptyList
+import cats.effect.IO
+import weaver.Expectations
+
+package object example {
+   def expectAll(xs: NonEmptyList[IO[Expectations]]): IO[Expectations] =  {
+    xs.sequence.map(_.fold)
+  }
+}
+```
+
+This was easy since `Expectations` forms a monoid (by default, under `AND` / multiplicative semantics). 
+
+We can write the dual of that by selecting the monoid with additive semantics:
+
+```scala
+def expectSome(xs: NonEmptyList[IO[Expectations]]): IO[Expectations] =  {
+    xs.sequence.map { xs =>
+      xs.map(Additive(_)).fold
+    }.map(Additive.unwrap)
+  }
+```
+
+Let's put that to use in our contrived example suite:
+
+```scala
+package io.github.dimitarg.example
+
+import cats.effect.IO
+import fs2.Stream
+import weaver.pure._
+import cats.data.NonEmptyList
+
+object Examples extends Suite {
+
+  override def suitesStream: Stream[IO,RTest[Unit]] = Stream(
+      test("all expectations be true") {
+          expectAll(
+              NonEmptyList.of(
+                expect(1 == 1),
+                expect(2 == 2),
+                expect(3 == 3),
+              )
+          )
+      },
+      test("at least one expectation must be true") {
+          expectSome(
+              NonEmptyList.of(
+                expect(1 == 5),
+                expect(2 == 6),
+                expect(3 == 3),
+              )
+          )
+      }
+  )
+  
+}
+```
+
+```
+io.github.dimitarg.example.Examples
++ all expectations be true
++ at least one expectation must be true
+
+
+Execution took 17ms
+2 tests, 2 passed
+All tests in io.github.dimitarg.example.Examples passed
+```
+
+
+Let's try failing one of the tests:
+
+```scala
+test("at least one expectation must be true") {
+          expectSome(
+              NonEmptyList.of(
+                expect(1 == 5),
+                expect(2 == 6),
+                expect(3 == 100),
+              )
+          )
+      }
+```
+
+```
+- at least one expectation must be true
+
+ [1] assertion failed (src/test/scala/io/github/dimitarg/example/Examples.scala:23)
+ [1] 
+ [1] expect(1 == 5),
+
+ [2] assertion failed (src/test/scala/io/github/dimitarg/example/Examples.scala:24)
+ [2] 
+ [2] expect(2 == 6),
+
+ [3] assertion failed (src/test/scala/io/github/dimitarg/example/Examples.scala:25)
+ [3] 
+ [3] expect(3 == 100),
+```
+
+Neato.
+
+See what's happening here? We set out to write a function operating on test values. We wrote the obvious code, did so using the obvious and familiar tools, and the code does what we expect. We used zero percent "test DSL" and "framework functions"  in the process. 
+
+In other words, we approached this programming task in the way we would aproach any other, and that worked! This is the world we want to live in.
