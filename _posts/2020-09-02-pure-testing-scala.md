@@ -312,4 +312,81 @@ Neato.
 
 See what's happening here? We set out to write a function operating on test values. We wrote the obvious code, did so using the obvious and familiar tools, and the code does what we expect. We used zero percent "test DSL" and "framework functions"  in the process. 
 
-In other words, we approached this programming task in the way we would aproach any other, and that worked! This is the world we want to live in.
+In other words, **we approached this programming task in the way we would aproach any other programming task**, and that worked! This is the world we want to live in.
+
+# Manipulating test values
+
+Let's set out and write some frameworky features for our testing library.
+
+## Timeout
+
+Can we easily implement a timeout function for tests?
+
+We don't have to! We're already in `IO`, no need to reinvent the wheel.
+
+```scala
+test("timeout") {
+  expect(1==1)
+    .timeout(10.seconds)
+}
+```
+
+## Flake
+
+In general I think this is a poor idea, but for demonstration purposes, let's write a function which repeats a flaky test up to a certain nuber of times if it does not succeed.
+
+(*It's a poor idea because if your test is flaky, the way to go is to investigate and fix it, and not write code to work around it. It's a slippery slope to cut corners in test infrastructure.*)
+
+```scala
+def flaky(attempts: Int)(x: IO[Expectations]): IO[Expectations] = {
+      if(attempts<1) {
+          x
+      } else {
+          x.attempt.flatMap(
+            _.fold[IO[Expectations]](
+              _ => flaky(attempts-1)(x),
+                result => {
+                  if(result.run.isValid) {
+                    result.pure[IO]
+                  } else {
+                    flaky(attempts-1)(x)  
+                  }  
+                }  
+              )
+          )
+      }
+  }
+```
+
+```
+test("flaky") {
+  flaky(attempts = 10000) {
+    IO(System.currentTimeMillis()).map { now =>
+      expect(now % 2 == 0)  
+    }
+  }
+}
+```
+
+## Ignore a test
+
+Easy. (This already exists in `weaver-test`, but just for example's sake)
+
+```scala
+def ignored[A](reason: String)(x: RTest[A])(implicit loc: SourceLocation): RTest[A] = RTest(
+      x.name, _ => IO.raiseError(new IgnoredException(reason.some, loc))
+  )
+```
+
+```scala
+ignored("too lazy to fix")(test("this will fail"){
+  expect(1 == 3)
+})
+```
+
+```
+- this will fail !!! IGNORED !!!
+  too lazy to fix (src/test/scala/io/github/dimitarg/example/Examples.scala:41)
+```
+
+The list goes on. The point being, since we work in `IO`, and `Expectations` is just data, we can manipulate individual tests any way we like.
