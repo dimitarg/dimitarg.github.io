@@ -1,7 +1,7 @@
 ---
 title: "Purely functional testing in Scala"
-date: 2020-09-02T00:00:00Z
-published: false
+date: 2020-09-06T00:00:00Z
+published: true
 categories:
   - Functional Programming
   - Testing
@@ -9,6 +9,7 @@ tags:
   - fp
 ---
 
+**This article is a draft. It will be revised and finished shortly.** 
 
 Many projects written in Scala have now adopted the principles of purely functional programming. Those projects are written in the safe,
 purely functional subset of the Scala programming language. They utilise libraries such as `cats-effect`, `scalaz` or `zio`, in order
@@ -519,7 +520,166 @@ All tests in io.github.dimitarg.example.RoundingSpec passed
 Nice. Table driven tests in 1 line of code - `fs2.Stream.map`. Consider `scalatest`, where we would have needed
 framework support for this.
 
-
 # "Test fixtures"
 
-# Recap
+Finally, we'll look at test fixtures, a.k.a. the dreaded `before`/`after` and `beforeAll` / `afterAll`.
+
+A question comes up a lot during tests, especially integration tests: how do we allocate some sort of resource needed by a test (or the program under test), and safely dispose of it afterwards? We might want to allocate said resource before each test; or we might want to reuse it throughout a whole test suite; or we might want to have a combination of the two.
+
+The answer of traditional test frameworks is "side effects, plus framework lifecycle hooks such as `beforeXXX` / `afterXXX`". This is unfortunate and is expecially problematic when the code under test is itself pure and manages resources via functional patterns (the impedance mismatch we talked about at the beginning of the article.)
+
+Usually in such a situation, one ends up using the unsafe primitive `cats.effect.Resource.allocated`, in a combination with mutable state in which to store the acquire and release actions; and invoke those actions
+side effectfully in framework hooks. If you've written such code, you know it's a mess.
+
+The answer once testing becomes pure is "just use `cats.effect.Resource`" (or whatever the resource management type of your effect system is). Since we already have `IO`, `Resource` and `Stream` at our disposal, we don't
+need "framework support" to address such use cases.
+
+Let's give an example. We'll start off with coming up with some imaginary resource
+
+```scala
+final case class DatabaseConnection(value: String)
+```
+
+, and a function to conjure it
+
+```scala
+  def mkConnection(value: String): Resource[IO, DatabaseConnection] = for {
+      _ <- Resource.liftF(IO(println(s"acquiring connection: $value")))
+      result <- Resource.pure(DatabaseConnection(value))
+  } yield result
+```
+
+Next, a helper function to declare a test which will expect that a connection
+has an expected value.
+
+```scala
+def connTest(conn: DatabaseConnection)(expected: String): IO[Expectations] = for {
+      _ <- IO(s"got connection: $conn")
+  } yield expect(conn.value == expected)
+```
+
+Let's create a couple of tests that will use a "shared database connection".
+
+```scala
+val sharedConnectionTests: Stream[IO, RTest[Unit]] = 
+    Stream.resource(mkConnection("shared-conn")).flatMap { conn =>
+        Stream(
+            test("shared connection test")(connTest(conn)("shared-conn")),
+            test("shared connection - another test")(connTest(conn)("shared-conn"))
+        )
+    }
+```
+(both tests expect the connection passed to be `"shared-conn"` and will otherwise fail).
+
+That was easy, `Stream.resource` gives us a single-element stream of that resource. `flatMap` gives us access to the emitted resouce, and we construct a stream of tests that have access to it.
+
+Now let's spin up a couple of tests that use their own, isolated connection.
+```scala
+val ownConnectionTests: Stream[IO, RTest[Unit]] = 
+    Stream(
+      test("own connection - some test") {
+          mkConnection("foo-conn").use { conn =>
+           connTest(conn)("foo-conn")
+          }
+      },
+      test("own connection - another test") {
+          mkConnection("bar-conn").use { conn =>
+           connTest(conn)("bar-conn")
+          }
+      }
+    )
+```
+Ok, that's just `Resource.use`.
+
+Finally, let's construct our suite:
+
+```scala
+override def suitesStream: Stream[IO,RTest[Unit]] =
+    sharedConnectionTests ++ ownConnectionTests
+```
+
+Does it work?
+
+(full example [here](https://github.com/dimitarg/weaver-test-examples/blob/ecb506eae8dad4dd05701a39d7844c3c38f502ca/src/test/scala/io/github/dimitarg/example/ResourceExample.scala)).
+
+
+```
+io.github.dimitarg.example.ResourceExample
+acquiring connection: shared-conn
+acquiring connection: foo-conn
+acquiring connection: bar-conn
++ shared connection test
++ shared connection - another test
++ own connection - some test
++ own connection - another test
+
+Execution took 39ms
+4 tests, 4 passed
+All tests in io.github.dimitarg.example.ResourceExample passed
+```
+
+There. We have test and suite resource management with 0 lines of "framework code". This is again just a consequence of the fact that writing test programs is just writing programs - if your testing library doesn't get in the way.
+
+## ResourceSuite
+
+In integration tests, a pattern that comes up often is "allocate resources / dependencies, bootstrap system under test,
+execute a bunch of tests against it, sharing those resources, clean up". Since it comes up often,
+`weaver.pure` has explicit support for it. (though as you saw in the previous paragraph, you'll be perfrectly fine writing that on your own)
+
+You can write such a test via extending `RSuite` instead of `Suite`.
+
+```scala
+package io.github.dimitarg.example
+
+import weaver.pure._
+import cats.implicits._
+import fs2.Stream
+import cats.effect.Resource
+import cats.effect.IO
+
+object ResourceSuiteExample extends RSuite {
+
+  final case class DatabaseConnection(value: String)
+
+  override type R = DatabaseConnection
+
+  override def sharedResource: Resource[IO, DatabaseConnection] = for {
+      _ <- Resource.liftF(IO(println(s"acquiring shared connection")))
+      result <- Resource.pure[IO, DatabaseConnection](DatabaseConnection("shared-conn"))
+  } yield result
+
+
+  override def suitesStream: fs2.Stream[IO,RTest[DatabaseConnection]] = Stream(
+    rTest("some test") { conn =>
+      IO(println(s"got connection $conn")) >>
+        expect(1 == 1)
+    },
+    rTest("some other test") { conn =>
+      IO(println(s"got connection $conn")) >>
+        expect(2 == 2)
+    }
+  )
+}
+```
+
+Here, we needed to 
+
+- specify the type of our resource, `override type R = DatabaseConnection`
+- describe how to acquire it, `override def sharedResource: Resource[IO, DatabaseConnection] = ...`
+- The type of our suite becomes `fs2.Stream[IO,RTest[DatabaseConnection]]` (up until now we were working with `fs2.Stream[IO,RTest[Unit]]`)
+
+`RTest[DatabaseConnection]` says that the test has an input parameter of type `DatabaseConnection`. You create a test with input by using `rTest` instead of `test`.
+
+>You can another example of using `RSuite` [here](https://github.com/dimitarg/weaver-test-extra#using-subsets-of-a-shared-resource-across-multiple-modules), dealing with multiple types of resources.
+
+In any case, this is just one way to approach the problem. `fs2` gives you superpowers, and you are free to come up with your own approach, better suiting the needs of your project.
+
+# Conclusion
+
+Once we remove side effects from testing, we regain back compositionality. This means regaining back productivity, because when the testing library gets out of the way, writing test programs becomes writing regular programs.
+
+Being more productive when writing tests will mean testing more thoroughly, writing less incorrect tests and flaky tests, and catching more bugs before they make it into production.
+
+The vehicle for this exists, and I encourage you to give purely functional testing a try now!
+
+Since libraries such as `weaver-test` and `zio-test` can be used alongside your legacy tests, you can start reaping the benefits of functional testing immediately.
