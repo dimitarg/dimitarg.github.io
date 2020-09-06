@@ -408,10 +408,52 @@ Bar            | 86    | "KTHX"
 ```
 , that was helpfully provided by your product owner.
 
-The code under test rounds an electricity pay-as-you-go customer's balance in, up to penny, in their favour.
+The code under test rounds an electricity pay-as-you-go customer's balance up to the penny, in their favour.
 - If their balance is positive, i.e. they have more money on their account than they've used, we round up, giving them more money
 - If their balance is negative, i.e. they are in debt, we round down,
 giving them less debt
+
+Let's start with the code under test.
+
+```scala
+  final case class EnergyBalance(value: BigDecimal)
+  final case class Pence(value: Int)
+
+  def roundInFavourOfCustomer(balance: EnergyBalance): Pence = {
+      val roundingMode = if (balance.value >= 0) {
+          RoundingMode.UP
+      } else {
+          RoundingMode.DOWN
+      }
+
+      val rounded = balance.value.setScale(2, roundingMode)
+      val pence = (rounded * 100).toIntExact
+      Pence(pence)
+  }
+```
+
+Next, a data type to model a row in our specification table, containing scenario name, input and expected result.
+
+```scala
+final case class TestScenario(scenarioName: String, energyBalance: EnergyBalance, expectedResult: Pence)
+```
+
+Then our specification table becomes:
+
+```scala
+val testData: Stream[Pure, TestScenario] = Stream(
+    TestScenario("positive - nothing to round", EnergyBalance(2.49)   ,  Pence(249)),
+    TestScenario("positive rounds up",          EnergyBalance(2.494)  ,  Pence(250)),
+    TestScenario("positive rounds up - 2",      EnergyBalance(2.491)  ,  Pence(250)),
+    TestScenario("negative - nothing to round", EnergyBalance(-2.49)  ,  Pence(-249)),
+    TestScenario("negative rounds down",        EnergyBalance(-2.491) ,  Pence(-249)),
+    TestScenario("negative rounds down - 2",    EnergyBalance(-2.499) ,  Pence(-249))
+  )
+```
+
+We can map each element of this stream to a test that calls the function under test with the row's input,
+and expects the expected result, and we'd get back a test suite. Here is the whole code:
+
 
 ```scala
 import weaver.pure._
@@ -458,8 +500,7 @@ object RoundingSpec extends Suite {
 }
 ```
 
-We start by noting that a specification table is a `Stream` of values, in this case `testData: Stream[Pure, TestScenario]`. Then we map each element of the table to a test, which expects that rounding the row's
-energy balance results in the expected amount of pence.
+Does that work?
 
 ```
 io.github.dimitarg.example.RoundingSpec
