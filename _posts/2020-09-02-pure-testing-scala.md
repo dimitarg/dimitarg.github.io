@@ -88,7 +88,7 @@ def test(name: String)(run: IO[Expectations]): Unit
 
 We'd like this to return a value instead.
 
-Luckily, this problem is not inherent to the programming model of the library. I wrote a micro-library [`weaver-test-extra`](https://github.com/dimitarg/weaver-test-extra) overcoming it. We will be using this library in addition to `weaver-test` in all the below examples. The library contains [nearly no code](https://github.com/dimitarg/weaver-test-extra/tree/60523cbe2fd58347ce3ab4fa5566a7f273dc9dd2/src/main/scala/weaver/pure) - you could write it yourself if you wanted.
+Luckily, this problem is not inherent to the programming model of the library. I wrote a micro-lib [`weaver-test-extra`](https://github.com/dimitarg/weaver-test-extra) overcoming it. We will be using that in addition to `weaver-test` in all the below examples. It contains [nearly no code](https://github.com/dimitarg/weaver-test-extra/tree/60523cbe2fd58347ce3ab4fa5566a7f273dc9dd2/src/main/scala/weaver/pure) - you could write it yourself if you wanted, and possibly do better. 
 
 The point is, we now don't have to worry how side-effectful registrations might interact with regular code and break compositionality. It's now regular code all the way down.
 
@@ -183,7 +183,7 @@ test("reality is still in place") {
 
 Neato.
 
-## Type trickery
+## Digression - type trickery
 
 `expect(1 == 1)` has type of `Expectations`, but we saw that `test` expects `IO[Expectations]` as input. Why does our code typecheck?
 
@@ -194,17 +194,17 @@ implicit def expectationsConversion(e: Expectations): IO[Expectations] =
     e.pure[IO]
 ```
 
-The same code exists in vanilla `weaver-test`. This is so that you can write effecful and non-effectful tests the same way. 
+The same code exists in vanilla `weaver-test`. This is done so that we can write effecful and non-effectful tests in the same manner. 
 
-I am not fully convinced this is great. At the very least it's a pedagogical problem, since an explanation was needed. And it does smell a bit dynamically typed.
+*I am not fully convinced this is great. At the very least it's a pedagogical problem, since an explanation is needed. And it does smell a bit dynamically typed.*
 
-An alternative would be provide two separate functions, say `test` and `testM`, for declaring non-effectful and effectful tests. This is the approach `zio-test` takes, and one that `weaver-test-extra` might adopt in an upcoming version.
+An alternative would be provide two separate functions, say `test` and `testM`, for declaring non-effectful and effectful tests. This is the approach `zio-test` currently takes, and one that `weaver-test-extra` might adopt in an upcoming version.
 
 # Composing test values
 
 As we pointed out, since tests are just values, we can compose and manipulate them in the usual ways.
 
-Let's write a library function taking a list of expectations, and returning an expectation which passes if all the given expecations pass:
+Let's write a function taking a list of expectations, and returning an expectation which passes if all the given expecations pass:
 
 ```scala
 import cats.implicits._
@@ -231,7 +231,7 @@ def expectSome(xs: NonEmptyList[IO[Expectations]]): IO[Expectations] =  {
   }
 ```
 
-Let's put that to use in our contrived example suite:
+Let's put that to use in an example:
 
 ```scala
 package io.github.dimitarg.example
@@ -244,7 +244,7 @@ import cats.data.NonEmptyList
 object Examples extends Suite {
 
   override def suitesStream: Stream[IO,RTest[Unit]] = Stream(
-      test("all expectations be true") {
+      test("all expectations must be true") {
           expectAll(
               NonEmptyList.of(
                 expect(1 == 1),
@@ -269,7 +269,7 @@ object Examples extends Suite {
 
 ```
 io.github.dimitarg.example.Examples
-+ all expectations be true
++ all expectations must be true
 + at least one expectation must be true
 
 
@@ -340,23 +340,23 @@ In general I think this is a poor idea, but for demonstration purposes, let's wr
 
 ```scala
 def flaky(attempts: Int)(x: IO[Expectations]): IO[Expectations] = {
-      if(attempts<1) {
-          x
-      } else {
-          x.attempt.flatMap(
-            _.fold[IO[Expectations]](
-              _ => flaky(attempts-1)(x),
-                result => {
-                  if(result.run.isValid) {
-                    result.pure[IO]
-                  } else {
-                    flaky(attempts-1)(x)  
-                  }  
-                }  
-              )
-          )
-      }
+  if(attempts<1) {
+    x
+  } else {
+    x.attempt.flatMap(
+      _.fold[IO[Expectations]](
+        _ => flaky(attempts-1)(x),
+        result => {
+          if(result.run.isValid) {
+            result.pure[IO]
+          } else {
+            flaky(attempts-1)(x)  
+          }  
+        }  
+      )
+    )
   }
+}
 ```
 
 ```
@@ -375,8 +375,8 @@ Easy. (This already exists in `weaver-test`, but just for example's sake)
 
 ```scala
 def ignored[A](reason: String)(x: RTest[A])(implicit loc: SourceLocation): RTest[A] = RTest(
-      x.name, _ => IO.raiseError(new IgnoredException(reason.some, loc))
-  )
+  x.name, _ => IO.raiseError(new IgnoredException(reason.some, loc))
+)
 ```
 
 ```scala
@@ -394,8 +394,7 @@ The list goes on. The point being, since we work in `IO`, and `Expectations` is 
 
 # Composing suite values
 
-Since suites are `fs2.Stream` values, we can compose and manipulate suites in the usual ways we work with 
-`fs2.Stream`s.
+Since suites are `fs2.Stream` values, we can compose and manipulate suites in the usual ways we work with `fs2.Stream`s.
 
 For example, let's try to implement a "table-driven" test. I.e. run a multitude of tests generated by a table
 of the following form
@@ -407,7 +406,7 @@ Foo            | 42    | "Shrubbery"
 Bar            | 86    | "KTHX"
 ...
 ```
-, that was helpfully provided by your product owner.
+, that was helpfully provided by our product owner.
 
 The code under test rounds an electricity pay-as-you-go customer's balance up to the penny, in their favour.
 - If their balance is positive, i.e. they have more money on their account than they've used, we round up, giving them more money
@@ -417,43 +416,46 @@ giving them less debt
 Let's start with the code under test.
 
 ```scala
-  final case class EnergyBalance(value: BigDecimal)
-  final case class Pence(value: Int)
+final case class EnergyBalance(value: BigDecimal)
+final case class Pence(value: Int)
 
-  def roundInFavourOfCustomer(balance: EnergyBalance): Pence = {
-      val roundingMode = if (balance.value >= 0) {
-          RoundingMode.UP
-      } else {
-          RoundingMode.DOWN
-      }
-
-      val rounded = balance.value.setScale(2, roundingMode)
-      val pence = (rounded * 100).toIntExact
-      Pence(pence)
+def roundInFavourOfCustomer(balance: EnergyBalance): Pence = {
+  val roundingMode = if (balance.value >= 0) {
+    RoundingMode.UP
+  } else {
+    RoundingMode.DOWN
   }
+
+  val rounded = balance.value.setScale(2, roundingMode)
+  val pence = (rounded * 100).toIntExact
+  Pence(pence)
+}
 ```
 
 Next, a data type to model a row in our specification table, containing scenario name, input and expected result.
 
 ```scala
-final case class TestScenario(scenarioName: String, energyBalance: EnergyBalance, expectedResult: Pence)
+final case class TestScenario(
+  scenarioName: String,
+  energyBalance: EnergyBalance, expectedResult: Pence
+)
 ```
 
-Then our specification table becomes:
+Then, our specification table becomes:
 
 ```scala
 val testData: Stream[Pure, TestScenario] = Stream(
-    TestScenario("positive - nothing to round", EnergyBalance(2.49)   ,  Pence(249)),
-    TestScenario("positive rounds up",          EnergyBalance(2.494)  ,  Pence(250)),
-    TestScenario("positive rounds up - 2",      EnergyBalance(2.491)  ,  Pence(250)),
-    TestScenario("negative - nothing to round", EnergyBalance(-2.49)  ,  Pence(-249)),
-    TestScenario("negative rounds down",        EnergyBalance(-2.491) ,  Pence(-249)),
-    TestScenario("negative rounds down - 2",    EnergyBalance(-2.499) ,  Pence(-249))
-  )
+  TestScenario("positive - nothing to round", EnergyBalance( 2.49)  ,  Pence( 249)),
+  TestScenario("positive rounds up",          EnergyBalance( 2.494) ,  Pence( 250)),
+  TestScenario("positive rounds up - 2",      EnergyBalance( 2.491) ,  Pence( 250)),
+  TestScenario("negative - nothing to round", EnergyBalance(-2.49)  ,  Pence(-249)),
+  TestScenario("negative rounds down",        EnergyBalance(-2.491) ,  Pence(-249)),
+  TestScenario("negative rounds down - 2",    EnergyBalance(-2.499) ,  Pence(-249))
+)
 ```
 
 We can map each element of this stream to a test that calls the function under test with the row's input,
-and expects the expected result, and we'd get back a test suite. Here is the whole code:
+and expects the expected result, and we'd get back a test suite. Here is the full listing:
 
 
 ```scala
@@ -469,15 +471,15 @@ object RoundingSpec extends Suite {
   final case class Pence(value: Int)
 
   def roundInFavourOfCustomer(balance: EnergyBalance): Pence = {
-      val roundingMode = if (balance.value >= 0) {
-          RoundingMode.UP
-      } else {
-          RoundingMode.DOWN
-      }
+    val roundingMode = if (balance.value >= 0) {
+      RoundingMode.UP
+    } else {
+      RoundingMode.DOWN
+    }
 
-      val rounded = balance.value.setScale(2, roundingMode)
-      val pence = (rounded * 100).toIntExact
-      Pence(pence)
+    val rounded = balance.value.setScale(2, roundingMode)
+    val pence = (rounded * 100).toIntExact
+    Pence(pence)
   }
 
   final case class TestScenario(scenarioName: String, energyBalance: EnergyBalance, expectedResult: Pence)
@@ -491,13 +493,13 @@ object RoundingSpec extends Suite {
     TestScenario("negative rounds down - 2",    EnergyBalance(-2.499) ,  Pence(-249))
   )
 
-  override def suitesStream: Stream[IO,RTest[Unit]] = testData
+  override def suitesStream: Stream[IO,RTest[Unit]] = 
+    testData
     .covary[IO]
     .map(x => test(x.scenarioName)(
-        expect(roundInFavourOfCustomer(x.energyBalance) == x.expectedResult)
+      expect(roundInFavourOfCustomer(x.energyBalance) == x.expectedResult)
     ))
     .timeout(5.seconds)
-
 }
 ```
 
@@ -517,8 +519,7 @@ Execution took 21ms
 All tests in io.github.dimitarg.example.RoundingSpec passed
 ```
 
-Nice. Table driven tests in 1 line of code - `fs2.Stream.map`. Consider `scalatest`, where we would have needed
-framework support for this.
+Nice. Table driven tests in 1 line of code - `fs2.Stream.map`. Consider `scalatest`, where we would have needed framework support for this.
 
 # "Test fixtures"
 
@@ -543,10 +544,10 @@ final case class DatabaseConnection(value: String)
 , and a function to conjure it
 
 ```scala
-  def mkConnection(value: String): Resource[IO, DatabaseConnection] = for {
-      _ <- Resource.liftF(IO(println(s"acquiring connection: $value")))
-      result <- Resource.pure(DatabaseConnection(value))
-  } yield result
+def mkConnection(value: String): Resource[IO, DatabaseConnection] = for {
+  _ <- Resource.liftF(IO(println(s"acquiring connection: $value")))
+  result <- Resource.pure(DatabaseConnection(value))
+} yield result
 ```
 
 Next, a helper function to declare a test which will expect that a connection
@@ -554,20 +555,20 @@ has an expected value.
 
 ```scala
 def connTest(conn: DatabaseConnection)(expected: String): IO[Expectations] = for {
-      _ <- IO(s"got connection: $conn")
-  } yield expect(conn.value == expected)
+  _ <- IO(s"got connection: $conn")
+} yield expect(conn.value == expected)
 ```
 
 Let's create a couple of tests that will use a "shared database connection".
 
 ```scala
 val sharedConnectionTests: Stream[IO, RTest[Unit]] = 
-    Stream.resource(mkConnection("shared-conn")).flatMap { conn =>
-        Stream(
-            test("shared connection test")(connTest(conn)("shared-conn")),
-            test("shared connection - another test")(connTest(conn)("shared-conn"))
-        )
-    }
+  Stream.resource(mkConnection("shared-conn")).flatMap { conn =>
+    Stream(
+      test("shared connection test")(connTest(conn)("shared-conn")),
+      test("shared connection - another test")(connTest(conn)("shared-conn"))
+    )
+  }
 ```
 (both tests expect the connection passed to be `"shared-conn"` and will otherwise fail).
 
@@ -576,22 +577,22 @@ That was easy, `Stream.resource` gives us a single-element stream of that resour
 Now let's spin up a couple of tests that use their own, isolated connection.
 ```scala
 val ownConnectionTests: Stream[IO, RTest[Unit]] = 
-    Stream(
-      test("own connection - some test") {
-          mkConnection("foo-conn").use { conn =>
-           connTest(conn)("foo-conn")
-          }
-      },
-      test("own connection - another test") {
-          mkConnection("bar-conn").use { conn =>
-           connTest(conn)("bar-conn")
-          }
+  Stream(
+    test("own connection - some test") {
+      mkConnection("foo-conn").use { conn =>
+        connTest(conn)("foo-conn")
       }
-    )
+    },
+    test("own connection - another test") {
+      mkConnection("bar-conn").use { conn =>
+        connTest(conn)("bar-conn")
+      }
+    }
+  )
 ```
 Ok, that's just `Resource.use`.
 
-Finally, let's construct our suite:
+Finally, let's compose our suite:
 
 ```scala
 override def suitesStream: Stream[IO,RTest[Unit]] =
@@ -618,9 +619,9 @@ Execution took 39ms
 All tests in io.github.dimitarg.example.ResourceExample passed
 ```
 
-There. We have test and suite resource management with 0 lines of "framework code". This is again just a consequence of the fact that writing test programs is just writing programs - if your testing library doesn't get in the way.
+There. We now have test and suite resource management - with 0 lines of "framework code"! This is again a consequence of the fact that writing test programs is just writing programs - if your testing library doesn't get in the way.
 
-## ResourceSuite
+## `ResourceSuite`
 
 In integration tests, a pattern that comes up often is "allocate resources / dependencies, bootstrap system under test,
 execute a bunch of tests against it, sharing those resources, clean up". Since it comes up often,
@@ -644,8 +645,8 @@ object ResourceSuiteExample extends RSuite {
   override type R = DatabaseConnection
 
   override def sharedResource: Resource[IO, DatabaseConnection] = for {
-      _ <- Resource.liftF(IO(println(s"acquiring shared connection")))
-      result <- Resource.pure[IO, DatabaseConnection](DatabaseConnection("shared-conn"))
+    _ <- Resource.liftF(IO(println(s"acquiring shared connection")))
+    result <- Resource.pure[IO, DatabaseConnection](DatabaseConnection("shared-conn"))
   } yield result
 
 
