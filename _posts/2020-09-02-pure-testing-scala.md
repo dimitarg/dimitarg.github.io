@@ -9,8 +9,6 @@ tags:
   - fp
 ---
 
-**This article is a draft. It will be revised and finished shortly.** 
-
 Many projects written in Scala have now adopted the principles of purely functional programming. These projects are built in the safe subset of the language (also known as `scalazzi`). They utilise libraries such as `cats-effect`, `scalaz` or `zio` in order to be able to talk about computational effects without sacrificing referential transparency, parametricity and local reasoning.
 
 However, for almost all these projects, the above claim is only true for the "production" part of the codebase. Test code is riddled with side effects. The reason is the widely used testing frameworks insist that we program with side effects:
