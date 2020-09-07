@@ -20,14 +20,14 @@ However, for almost all these projects, the above claim is only true for the "pr
 
 # Why is this a big deal?
 
-1. By sacrificing referential transparency in tests, we lose the productivity gains stemming from functional programming. In general, we can no longer reason
-equationally, or apply the substitution principle when refactoring. Worst of all, we lose the tools of composition, which means tests become harder to write, less concise and less obviously correct than they should be.
+1. By sacrificing referential transparency in tests, we lose the productivity gains stemming from functional programming. We can no longer reason
+equationally, or apply the substitution principle when refactoring. We lose the tools of composition, which means tests become harder to write, less concise and less obviously correct than they should be.
 
 2. We use a different programming model, and a different mental model when writing production code and when writing tests. This creates mental context
 shifting and makes us waste time and energy - for no good reason other than "`scalatest`/ `x` insists we do that".
 
 3. Since we have already committed that our production code is pure, we are now forced
-to test pure code in an impure testing language. This creates an impedance mismatch which at the very least manifests as `unsafeRunX` all over the place. The mismatch becomes especially apparent, ugly and boilerplate-prone once you try do something more complicated, such as share resources across multiple tests or test suites; deal with a `cats.effect.Resource` in a `beforeAll` / `afterAll` setup, bootstrap and shutdown a whole `IOApp` safely and without leaking resources within a given testing scope, etc.
+to test pure code in an impure testing language. This creates an impedance mismatch which at the very least manifests as `unsafeRunX` all over the place. The mismatch becomes especially apparent, boilerplate prone and error prone in use cases such as resource management, i.e. test / suite setup and teardown and the such.
 
 4. By admitting that production code must be pure, but it's okay for tests to rely on side effects, we give tests a status of a second-class citizen.
 
@@ -38,6 +38,16 @@ And I think there's no good reasons we do, aside from inertia and the status quo
 # Enter pure testing
 
 There exists a testing library called [weaver-test](https://disneystreaming.github.io/weaver-test/) which allows us to test in a referentially transparent manner. 
+
+We will be using that, but what's written here should apply to other libraries with similar design. The central ideas behind `weaver-test` are:
+
+- Introduce a data type to describe assertions
+- The result of an assertion is then a value of this data type
+- A `Test` is a value which computes assertions, potentially in `IO`
+- A test suite is a collection of tests. It has type `Stream[IO, Test]`
+
+
+## `weaver-test` basics
 
 > Note: `weaver-test` is built on top of `cats-effect` and `fs2`. If you're using `zio`, it has a module for `zio` integration; that being said, you should also consider looking at [`zio-test`](https://zio.dev/docs/usecases/usecases_testing).
 
