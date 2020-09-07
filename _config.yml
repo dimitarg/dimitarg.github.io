@@ -58,7 +58,7 @@ plugins:
 author:
   name   : "Dimitar Georgiev"
   avatar : "/assets/images/bio-photo.jpg"
-  bio    : "Functional programmer, nature lover, amateur singer, and who knows what else."
+  bio    : "Functional programmer, nature lover, amateur singer."
   links:
     - label: "GitHub"
       icon: "fab fa-fw fa-github"
