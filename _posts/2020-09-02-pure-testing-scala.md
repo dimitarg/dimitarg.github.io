@@ -69,10 +69,7 @@ someTest: IO[Expectations]
 
 This means that even if the code under test, or the test setup code is in `IO` (or some transformer stack containing `IO`), we don't have to resort to `unsafeRunX` in order to write the test, and that we can compose test values via `IO`, as well as via the applicative / monadic / monoidal structure of `Expectations` itself.
 
-That is to say, we can now write test code the same way we write any other code - via the tools of functional programming! 
-
-If you're a haskell programmer, your reaction at this point probably is "well, yeah." But for Scala, I think this is a game changer. I have been coding tests like this for a while now, I'm pretty happy with the results, and would like to present this approach and its implications.
-
+That is to say, we can now write test code the same way we write any other code - via the tools of functional programming!
 
 ## Going the last mile
 
@@ -100,7 +97,7 @@ Luckily, this problem is not inherent to the programming model of the library. I
 
 The point is, we now don't have to worry how side-effectful registrations might interact with regular code and break compositionality. It's now regular code all the way down.
 
-Let's write some, and get a feel for purely functional testing, and what it buys us.
+Let's write some code to get a feel for purely functional testing, and what it buys us.
 
 (All the following code is [available on github](https://github.com/dimitarg/weaver-test-examples).)
 
@@ -153,7 +150,7 @@ In addition it can access an input parameter of type `R`. This comes in handy if
 Here we need no such environment, i.e. in our case `R=Unit`. We use the function `test` which returns `RTest[Unit]` 
 
 ```scala
-def test(name: String)(run: IO[Expectations]): RTest[Unit] = ???
+def test(name: String)(run: IO[Expectations]): RTest[Unit] = ...
 ```
 ## Stream
 
@@ -212,7 +209,7 @@ An alternative would be provide two separate functions, say `test` and `testM`, 
 
 As we pointed out, since tests are just values, we can compose and manipulate them in the usual ways.
 
-Let's write a function taking a list of expectations, and returning an expectation which passes if all the given expecations pass:
+Let's write a function taking a list of expectations, and returns an expectation that passes if all the given expecations pass:
 
 ```scala
 import cats.implicits._
@@ -319,7 +316,7 @@ test("at least one expectation must be true") {
 
 Neato.
 
-See what's happening here? We set out to write a function operating on test values. We wrote the obvious code, did so using the obvious and familiar tools, and the code does what we expect. We used zero percent "test DSL" and "framework functions"  in the process. 
+An interesting thing is happening here. We set out to write a function operating on test values. We wrote the obvious code, did so using the obvious and familiar tools, and the code does what we expect. We used zero percent "test DSL" and "framework functions"  in the process. 
 
 In other words, **we approached this programming task in the way we would aproach any other programming task**, and that worked! This is the world we want to live in.
 
@@ -416,18 +413,18 @@ Bar            | 86    | "KTHX"
 ```
 , that was helpfully provided by our product owner.
 
-The code under test rounds an electricity pay-as-you-go customer's balance up to the penny, in their favour.
-- If their balance is positive, i.e. they have more money on their account than they've used, we round up, giving them more money
+The code under test rounds an account fund balance up to the penny, in the account's favour.
+- If the account balance is positive, we round up,  potentially giving them more money
 - If their balance is negative, i.e. they are in debt, we round down,
 giving them less debt
 
 Let's start with the code under test.
 
 ```scala
-final case class EnergyBalance(value: BigDecimal)
+final case class Balance(value: BigDecimal)
 final case class Pence(value: Int)
 
-def roundInFavourOfCustomer(balance: EnergyBalance): Pence = {
+def roundInFavourOfAccount(balance: Balance): Pence = {
   val roundingMode = if (balance.value >= 0) {
     RoundingMode.UP
   } else {
@@ -445,7 +442,7 @@ Next, a data type to model a row in our specification table, containing scenario
 ```scala
 final case class TestScenario(
   scenarioName: String,
-  energyBalance: EnergyBalance, expectedResult: Pence
+  balance: Balance, expectedResult: Pence
 )
 ```
 
@@ -453,12 +450,12 @@ Then, our specification table becomes:
 
 ```scala
 val testData: Stream[Pure, TestScenario] = Stream(
-  TestScenario("positive - nothing to round", EnergyBalance( 2.49)  ,  Pence( 249)),
-  TestScenario("positive rounds up",          EnergyBalance( 2.494) ,  Pence( 250)),
-  TestScenario("positive rounds up - 2",      EnergyBalance( 2.491) ,  Pence( 250)),
-  TestScenario("negative - nothing to round", EnergyBalance(-2.49)  ,  Pence(-249)),
-  TestScenario("negative rounds down",        EnergyBalance(-2.491) ,  Pence(-249)),
-  TestScenario("negative rounds down - 2",    EnergyBalance(-2.499) ,  Pence(-249))
+  TestScenario("positive - nothing to round", Balance( 2.49)  ,  Pence( 249)),
+  TestScenario("positive rounds up",          Balance( 2.494) ,  Pence( 250)),
+  TestScenario("positive rounds up - 2",      Balance( 2.491) ,  Pence( 250)),
+  TestScenario("negative - nothing to round", Balance(-2.49)  ,  Pence(-249)),
+  TestScenario("negative rounds down",        Balance(-2.491) ,  Pence(-249)),
+  TestScenario("negative rounds down - 2",    Balance(-2.499) ,  Pence(-249))
 )
 ```
 
@@ -467,6 +464,8 @@ and expects the expected result, and we'd get back a test suite. Here is the ful
 
 
 ```scala
+package io.github.dimitarg.example
+
 import weaver.pure._
 import fs2._
 import cats.effect.IO
@@ -475,10 +474,10 @@ import scala.concurrent.duration._
 
 object RoundingSpec extends Suite {
 
-  final case class EnergyBalance(value: BigDecimal)
+  final case class Balance(value: BigDecimal)
   final case class Pence(value: Int)
 
-  def roundInFavourOfCustomer(balance: EnergyBalance): Pence = {
+  def roundInFavourOfAccount(balance: Balance): Pence = {
     val roundingMode = if (balance.value >= 0) {
       RoundingMode.UP
     } else {
@@ -490,22 +489,21 @@ object RoundingSpec extends Suite {
     Pence(pence)
   }
 
-  final case class TestScenario(scenarioName: String, energyBalance: EnergyBalance, expectedResult: Pence)
+  final case class TestScenario(scenarioName: String, balance: Balance, expectedResult: Pence)
 
   val testData: Stream[Pure, TestScenario] = Stream(
-    TestScenario("positive - nothing to round", EnergyBalance(2.49)   ,  Pence(249)),
-    TestScenario("positive rounds up",          EnergyBalance(2.494)  ,  Pence(250)),
-    TestScenario("positive rounds up - 2",      EnergyBalance(2.491)  ,  Pence(250)),
-    TestScenario("negative - nothing to round", EnergyBalance(-2.49)  ,  Pence(-249)),
-    TestScenario("negative rounds down",        EnergyBalance(-2.491) ,  Pence(-249)),
-    TestScenario("negative rounds down - 2",    EnergyBalance(-2.499) ,  Pence(-249))
+    TestScenario("positive - nothing to round", Balance(2.49)   ,  Pence(249)),
+    TestScenario("positive rounds up",          Balance(2.494)  ,  Pence(250)),
+    TestScenario("positive rounds up - 2",      Balance(2.491)  ,  Pence(250)),
+    TestScenario("negative - nothing to round", Balance(-2.49)  ,  Pence(-249)),
+    TestScenario("negative rounds down",        Balance(-2.491) ,  Pence(-249)),
+    TestScenario("negative rounds down - 2",    Balance(-2.499) ,  Pence(-249))
   )
 
-  override def suitesStream: Stream[IO,RTest[Unit]] = 
-    testData
+  override def suitesStream: Stream[IO,RTest[Unit]] = testData
     .covary[IO]
     .map(x => test(x.scenarioName)(
-      expect(roundInFavourOfCustomer(x.energyBalance) == x.expectedResult)
+      expect(roundInFavourOfAccount(x.balance) == x.expectedResult)
     ))
     .timeout(5.seconds)
 }
