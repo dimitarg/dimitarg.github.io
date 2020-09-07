@@ -44,7 +44,7 @@ We will be using that, but what's written here should apply to other libraries w
 - Introduce a data type to describe assertions
 - The result of an assertion is then a value of this data type
 - A `Test` is a value which computes assertions, potentially in `IO`
-- A test suite is a collection of tests. It has type `Stream[IO, Test]`
+- A test suite is a collection of tests. It has type `fs2.Stream[IO, Test]`
 
 
 ## `weaver-test` basics
@@ -93,7 +93,7 @@ def test(name: String)(run: IO[Expectations]): Unit
 
 We'd like this to return a value instead.
 
-Luckily, this problem is not inherent to the programming model of the library. I wrote a micro-lib [`weaver-test-extra`](https://github.com/dimitarg/weaver-test-extra) overcoming it. We will be using that in addition to `weaver-test` in all the below examples. It contains [nearly no code](https://github.com/dimitarg/weaver-test-extra/tree/60523cbe2fd58347ce3ab4fa5566a7f273dc9dd2/src/main/scala/weaver/pure) - you could write it yourself if you wanted, and possibly do better. 
+Luckily, this problem is not inherent to the programming model of the library. I wrote a micro-lib [`weaver-test-extra`](https://github.com/dimitarg/weaver-test-extra) to address it. We will be using that in addition to `weaver-test` in all the below examples. It contains [nearly no code](https://github.com/dimitarg/weaver-test-extra/tree/60523cbe2fd58347ce3ab4fa5566a7f273dc9dd2/src/main/scala/weaver/pure) - you could write it yourself if you wanted, and probably do better. 
 
 The point is, we now don't have to worry how side-effectful registrations might interact with regular code and break compositionality. It's now regular code all the way down.
 
