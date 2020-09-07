@@ -364,7 +364,7 @@ def flaky(attempts: Int)(x: IO[Expectations]): IO[Expectations] = {
 }
 ```
 
-```
+```scala
 test("flaky") {
   flaky(attempts = 10000) {
     IO(System.currentTimeMillis()).map { now =>
