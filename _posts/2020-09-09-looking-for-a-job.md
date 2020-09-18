@@ -17,7 +17,7 @@ I am primarily looking at positions where expertise in functional programming is
 - I believe this is the most productive and practical way our industry currently has of building software;
 - I would like to protect my existing, several-year investment in studying functional programming, therefore I would prefer to work on a project where I can continue to improve my skills in this area.
 
-In practice this would mean I'm looking for roles where Scala is the main language used; I am also very interested in positions where the main languages are Haskell and Purescript, and it's okay to pick up those languages on the job (I do have preliminary experience with Haskell, am somewhat comfortable with the syntax, and  have understanding with many of the abstractions used to write haskell programs.)
+In practice this would mean I'm looking for roles where Scala is the main language used; I am also very interested in positions where the main languages are Haskell and Purescript, and it's okay to pick up those languages on the job (I have preliminary experience with Haskell, am somewhat comfortable with the syntax, and have working knowledge of some of the abstractions used to write haskell programs.)
 
 On the infrastructure side of things, I am productive working with GCP / GKE, comfortable working with AWS, and know my way around infrastructure-as-code tools, software deployment tools, monitoring and service management tools.
 
