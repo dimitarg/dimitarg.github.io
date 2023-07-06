@@ -209,7 +209,9 @@ code .
 
 HLS will take a bunch of time to fire up, and afterwards we get a working IDE integration:
 
-![alt text](../assets/videos/working-ide.webm "VSCode HLS Integration working.")
+<video src="../assets/videos/working-ide.webm" controls="controls" style="max-width: 730px;">
+</video>
+
 
 Happy hacking!
 
