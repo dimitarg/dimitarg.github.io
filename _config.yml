@@ -17,7 +17,6 @@ title: Mitaka's Refuge
 email: dimitar.georgiev.bg@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Dimitar Georgiev's blog (mostly) about programming
-twitter_username: dgeorgiev_bg
 github_username: dimitarg
 minimal_mistakes_skin: default
 search: true
@@ -58,26 +57,14 @@ plugins:
 author:
   name   : "Dimitar Georgiev"
   avatar : "/assets/images/bio-photo.jpg"
-  bio    : "Functional programmer, nature lover, amateur singer."
+  bio    : "Functional programmer, nature lover, scared climber, amateur singer."
   links:
     - label: "GitHub"
       icon: "fab fa-fw fa-github"
       url: "https://github.com/dimitarg"
-    - label: "Twitter"
-      icon: "fab fa-fw fa-twitter-square"
-      url: "https://twitter.com/dgeorgiev_bg"
     - label: LinkedIn
       icon: "fab fa-fw fa-linkedin-in"
       url: "https://www.linkedin.com/in/dimitar-georgiev-498bb48/"
-
-footer:
-  links:
-    - label: "GitHub"
-      icon: "fab fa-fw fa-github"
-      url: "https://github.com/dimitarg"
-    - label: "Twitter"
-      icon: "fab fa-fw fa-twitter-square"
-      url: "https://twitter.com/dgeorgiev_bg"
 
 defaults:
   # _posts
