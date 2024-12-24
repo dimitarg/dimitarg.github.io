@@ -11,6 +11,20 @@ tags:
   - messaging
 ---
 
+# Summary
+
+Depending on the usecase, it's possible to build a production-grade, near-realtime messaging system on top of just PostgreSQL, foregoing messaging middlewares such as Kafka entirely. This will take a certain amount of care, so while it can be simple it might not be that easy. After all, you'd be venturing off the beaten path.
+
+The cost of Kafka and similar software, in terms of operation, complexity and financial overhead is non-negligible, which is what prompted us to look for an alternative.
+
+We propose an architecture and sample implementation (in Scala) which might be a good fit if
+
+- You haven't already paid for and invested in a messaging bus
+- You already run PostgreSQL
+- Your throughput requirements are far from Google scale - which, statistically speaking, they are.
+
+If the above description does not fit your usecase, you might still find this article a useful exploration in system design. 
+
 # Introduction
 
 I've been out of a contract for a while - tough market, I know - so I was looking for a personal project to brush up on my programming and system design skills, and get idustry-grade experience with Scala 3 as well.
