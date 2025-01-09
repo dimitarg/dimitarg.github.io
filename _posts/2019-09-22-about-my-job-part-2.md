@@ -61,7 +61,7 @@ For starters, your internet can get disconnected! In that case the program will 
 
 ![alt text](../assets/images/about-my-job/barbed_wire_in.jpg "input with barbed wire")
 
-If you do have internet, and the search query does make it in, Google will send it to its servers for processing. But the server in question might be too busy, overheated, or a rat might have bitten its network cable! Beleive it or not, these things happen every day, because Google has thousands upon thousands of those servers. Sooner or later, a rat *will* make it into one of those shiny data centers.
+If you do have internet, and the search query does make it in, Google will send it to its servers for processing. But the server in question might be too busy, overheated, or a rat might have bitten its network cable! Believe it or not, these things happen every day, because Google has thousands upon thousands of those servers. Sooner or later, a rat *will* make it into one of those shiny data centers.
 
 Let's depict this by putting some more barbed wire, on the output side:
 
@@ -109,7 +109,7 @@ Here is the final result:
 That's right! There is nothing to refine. In this case, our simple initial model reflects reality accurately. That's the case because
 
 - You don't need to contact anything on the internet to sum numbers, your computer (or phone) is perfectly capable of doing that on its own
-- There's no way the program can fail at all, save for your device running out of electrical power, or something catastrophical happening such as radiation eradicating all electronic devices
+- There's no way the program can fail at all, save for your device running out of electrical power, or something catastrophic happening such as radiation eradicating all electronic devices
 - Summing numbers does not depend on space, time, or the current American president. 3 + 4 is 7 today, was, and will be, forevermore. For all you care, you can safely remember (cache) that 3 + 4 is 7, and never need to calculate it again
 
 *One note: since summing numbers is a very simple thing, you might be tempted to think that programs that do not have barbed wire in their pictures are not very interesting. This is not the case - there are plenty of very useful programs that match the simple picture. It's just the variety of life - some programs have all sorts of barbed wire, clocks and bells, and others do not have any at all.*
@@ -140,20 +140,20 @@ But our model was wrong - we imagined sun and flowers where there was barbed wir
 
 And that, kids, is how Programming divorced Mathematics.
 
-Now, things will get sligtly worse before they get better. C'est la vie!
+Now, things will get slightly worse before they get better. C'est la vie!
 
 # A side note - forgiveness!
 
 *So far we established that software sucks, that it does so because it ignores its natural roots in mathematics, and that it ignores them by being dishonest about what is what. At this point you might think that we programmers are a reckless and careless bunch.*  
 
-*In our defense, a craftsman is shaped by their tools. In our case - programming languages, the tools which we use to create programs.*
+*In our defence, a craftsman is shaped by their tools. In our case - programming languages, the tools which we use to create programs.*
 
-*This simplictic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes our thinking](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf). The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this, as Dijkstra bluntly calls it, [mental damage](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html).*
+*This simplistic model in which the barbed wires, clocks, warning signs, and other aspects of physical reality are discarded, is deeply rooted in our tools, and this, in turn, [shapes our thinking](https://www.cs.cmu.edu/~crary/819-f09/Backus78.pdf). The reasons are historical, but the upshot is, that we're often taught the wrong way through university, our apprenticeships, our jobs, textbooks and conferences. It takes great effort to recover from this, as Dijkstra bluntly calls it, [mental damage](https://www.cs.utexas.edu/users/EWD/transcriptions/EWD10xx/EWD1036.html).*
 
 # On composition
 
 Composition is the process by which the individual parts come together to form a cohesive whole. It is all around us:
-- The notes, the pauses, the timbre, the arrangement, the indivuduality and feelings of the artist come together to compose a live musical piece
+- The notes, the pauses, the timbre, the arrangement, the individuality and feelings of the artist come together to compose a live musical piece
 - The particles come together to compose chemicals, compounds, tissues and living organisms
 - The individual engagements and pastime activities, when arranged well, come together to compose a satisfying daily schedule
 
@@ -209,7 +209,7 @@ The end result looks like this:
 ![alt text](../assets/images/about-my-job/arrows_with_rules.jpg "arrows and rules")
 
 
-Note the roundy things on each arrow in the picture. Those depict rules - the composition rules I was telling you about. The same sort of rules you will find in a mathematical textbook - the ones which allow engineers to create buildings that do not fall apart.
+Note the round-y things on each arrow in the picture. Those depict rules - the composition rules I was telling you about. The same sort of rules you will find in a mathematical textbook - the ones which allow engineers to create buildings that do not fall apart.
 
 The rules tell me what the arrows mean, and ultimately, what the final output can and cannot possibly be.
 
@@ -227,7 +227,7 @@ No matter which of the two ways I go, I will get back the same output. This migh
 
 # That's my job!
 
-That's my job! I put barbed wire, I compose things, and try to do it in such a way that we can use more and more of these mathemathical rules, so we can become more certain of the output of our systems.
+That's my job! I put barbed wire, I compose things, and try to do it in such a way that we can use more and more of these mathematical rules, so we can become more certain of the output of our systems.
 
 We functional programmers are trying to slowly win mathematics back. It's a long way from divorce to "happily ever after", but we are a persistent bunch! As I said in the beginning of this story, it matters! It's important that we do better.
 
