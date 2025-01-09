@@ -84,7 +84,7 @@ If we look at the above costs and disagree with paying them, where does that lea
 
 The two major requirements we have towards our solution are durability and near-realtime delivery. And the former is what RDBMS are built for, so that will be no issue.
 
-PosgtreSQL has a feature called `LISTEN` / `NOTIFY`, which is essentially an asynchronous inter-process communication mechanism. A "producer" can send messages to a notification channel from within a given session (within a transaction or otherwise), and any "consumer" *currently* listening on that channel (again, via a database session) would have those messages broadcasted to them. Effectively, this is a pub-sub system; more precisely a distributed multi-producer, multi-consumer queue.
+PostgreSQL has a feature called `LISTEN` / `NOTIFY`, which is essentially an asynchronous inter-process communication mechanism. A "producer" can send messages to a notification channel from within a given session (within a transaction or otherwise), and any "consumer" *currently* listening on that channel (again, via a database session) would have those messages broadcasted to them. Effectively, this is a pub-sub system; more precisely a distributed multi-producer, multi-consumer queue.
 
 The catch is, this pub-sub mechanism is not persistent / durable, and therefore has no delivery guarantees whatsoever. It does exactly what is advertised in the documentation - broadcast notifications to whoever is listening at the time. There's no persistent log of messages behind that, no acknowledgement protocol such as consumer group commit offsets, no capability to replay messages, etc. Because of that, multiple failure modes come to mind immediately:
 
@@ -107,6 +107,10 @@ Before setting out to crank out code, it's useful to contemplate what we want to
   - Zero-downtime deployments are possible.
 - We should attempt to optimise the system **throughput**, but not at the expense of any of the above requirements. Specifically, a design which increases throughput while increasing the chances of message duplication is not fit for our goals.
 
-> ... But might be an excellent fit for other usecases. We can imagine a payment processing usecase, where the payment gateway allows us to specify an external ID for our payment request. If we attempt to place the same payment multiple times, the downstream system itself will disallow the subsequent requests .In this case there's no harm in the occasional duplicate, so a design with slightly more duplicate messages but massive throughput increase might be desirable.
+> ... But might be an excellent fit for other usecases. We can imagine a payment processing usecase, where the payment gateway (e.g. Stripe) allows us to specify an external ID for our payment request. If we attempt to place the same payment multiple times, duplicates will be rejected anyway, with no side effect. In this case, a design with massive throughput increase at the cost of slight duplicate message increase might be a desirable one.
 
 # Tools of choice
+
+Our implementation language of choice will be `Scala`. Necessarily, a number of library choices need to be made - I've went for tried and tested ones which are suitable for production usage. Crucially, we use `skunk` which supports the native PostgreSQL backend / frontend protocol, and has good support for `LISTEN` / `NOTIFY`.
+
+I won't expand much more on the libraries used, lest this article turn into a book. For an overview of them, see [this article](../scala-stack).
