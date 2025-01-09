@@ -161,8 +161,13 @@ package object log:
 
 An alternative to `odin` is [`woof`](https://github.com/LEGO/woof). The main difference is `woof` uses `IOLocal` [for context propagation](https://github.com/LEGO/woof/issues/130#issue-1573872587), whereas `odin` uses `ReaderT`. If you don't have [strong opinions](https://github.com/LEGO/woof/issues/130#issuecomment-2462239678) about this, or if you have no need for context propagation, either alternative is fine.
 
-# Tracing
-TODO
+# Observability / distributed tracing
+
+I find it's sloppy to write programs where the answer to "what went wrong" is log grepping, and the answer to "why is this so slow" is "I have no idea, let's do some log grepping and print out a bunch of `System.currentTimeMillis()` in addition".
+
+My current library of choice is [natchez](`https://github.com/typelevel/natchez`), because that's what my database library of choice currently uses. As an actual observability backend, I default to [Honeycomb](https://www.honeycomb.io/). No strong opinions here - I just find it pretty easy to work with, and the pricing feels reasonable.
+
+Library-wise, the landscape is a bit messy / fractured today. I think the community might eventually settle on `https://github.com/typelevel/otel4s` - I see that my database library has switched to that on its main, unreleased branch.
 
 # Optics
 TODO
