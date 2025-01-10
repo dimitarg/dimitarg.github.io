@@ -145,11 +145,11 @@ Note at the time of writing `magnolify-scalacheck` [does not yet work with Scala
 
 It's best to use a logging library which integrates with your effect system, and for sure you want to avoid ones that are bloated to the point they cause [severe security issues](https://en.wikipedia.org/wiki/Log4Shell).
 
-[`valskalla/odin`](https://github.com/valskalla/odin) used to be a great alternative, but it's no longer maintained and has no Scala 3 version, so use[scalafreaks/odin](https://github.com/scalafreaks/odin) instead.
+[`valskalla/odin`](https://github.com/valskalla/odin) used to be a great alternative, but it's no longer maintained and has no Scala 3 version, so use the maintained fork [scalafreaks/odin](https://github.com/scalafreaks/odin) instead.
 
 `odin` is purely functional, integrated with `cats-effect` and can provide principled MDC context propagation via `ReaderT`, if you need that. In addition, it's not just a purely functional wrapper, but has an `slf4j` implementation, which foregoes the need for `logback` or anything else.
 
-As good practice dictates, log to console only, and if logs need to go anywhere else, let external infrastructure handle that.
+As good practice dictates, I recommend to log to console only, and if logs need to go anywhere else, let external infrastructure handle that.
 
 ```scala
 package yourproject
