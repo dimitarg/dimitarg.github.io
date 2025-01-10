@@ -274,6 +274,19 @@ final case class HealthResponse(
 ) derives Codec
 ```
 
+Sometimes you don't want to use a `derives` clause, because you're deriving a thing (in this case, `Codec`) for a domain datatype, and you don't want the domain datatype to know about the infrastructure thing.
+
+In that case, forego the syntax sugar and derive the thing outside the datatype:
+
+```scala
+package yourproject.json
+
+import io.circe.Codec
+
+object DomainCodecs:
+  given fooCodec: Codec[Foo] = Codec.derived
+```
+
 ## `tapir` instances
 
 Use Scala `derives` clause, which is going to use `magnolia` facilities under the hood, as far as I can tell.
@@ -287,6 +300,8 @@ final case class Foo(
     bar: String
 ) derives Schema
 ```
+
+Same remark about domain datatypes applies as with `Codec`s.
 
 ## `cats` instances
 
