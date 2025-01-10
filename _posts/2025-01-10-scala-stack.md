@@ -33,6 +33,8 @@ I didn't find picking up language changes hard. My current personal and work pro
 - Use `extension` in place of `implicit class`
 - Use `enum` in place of `sealed trait` whenever describing sum types. If my understanding is correct, this mostly works, however they currently don't have 100% feature parity. Specifically enums cannot nest enums. You can revert to `sealed trait` whenever facing issues, granted that's not great for consistency.
 
+> The above is, of course, by no means an exhausting list of language changes and new language features in Scala 3. Specifically it leaves out any new and changed type-level and metaprogramming facilities. We're mostly focused on slightly boring application programming in this article.
+
 ## Cross-building own libraries
 
 You might be in the position of maintaining libraries that need to be used across Scala 2 and Scala 3 services.
@@ -226,6 +228,63 @@ This, along with the fact that conversions between the refined type and its base
 In addition, `iron` comes with integrations for your favourite libraries that you've come to love and expect, such as `circe`, `ciris`, `skunk`, `doobie`, `cats`, `tapir`, etc.
 
 # Typeclass derivation
+
+, which is the compiler being able to infer typeclass instances that are "obvious", instead of us writing them out by hand.
+
+This is by no means critical, since you can always write your own instances, but it's handy and makes programs more terse. It's also good practice as a programmer to automate what you can, because sometimes the most hard to diagnose mistakes are found in boring, seemingly hard to get wrong code.
+
+The situation here has historically been somewhat messy because of the matrix of
+- Multiple base mechanisms to implement typeclass derivation (chiefly `shapeless` and `magnolia`)
+- Multiple flavours / ways of typeclass derivation used by the target libraries that you want to derive instances for ("semi-auto", "full-auto", etc)
+
+Out of the mechanisms, `magnolia` is preferred over `shapeless` in Scala 2, because of the superior (compile-time) performance.
+
+I believe the situation might have gotten even more colourful with Scala 3, as exemplified by this line of documentation in the `typelevel/kittens` project:
+
+```
+There are five options for type class derivation on Scala 3.
+```
+
+Rightly so, because Scala 3 provides a basic typeclass derivation mechanism itself, and syntax sugar for typeclass derivation at the call site.
+
+Below follow options for specific libraries. I haven't yet had a chance to test these out on large-scale codebases, so your mileage (and compile times) may vary.
+
+
+## `circe` instances
+
+Use Scala `derives` clause, which is going to use Scala 3 metaprogramming facilities under the hood.
+
+```scala
+package yourproject
+
+import io.circe.Codec
+
+final case class HealthResponse(
+    message: String
+) derives Codec
+```
+
+## `tapir` instances
+
+Use Scala `derives` clause, which is going to use `magnolia` facilities under the hood, as far as I can tell.
+
+```scala
+package yourproject
+
+import sttp.tapir.Schema
+
+final case class Foo(
+    bar: String
+) derives Schema
+```
+
+## `cats` instances
+
+Use [`kittens`](https://github.com/typelevel/kittens), which uses `shapeless3` under the hood. [`magnolify/cats`](https://github.com/spotify/magnolify/tree/main/cats/src) used to be an option, but at the time of writing it doesn't support Scala 3.
+
+## `scalacheck` instances
+
+As already pointed out, there's no good solution currently. [magnolify/scalacheck](https://github.com/spotify/magnolify/tree/main/scalacheck/src) used to be an option, but at the time of writing it doesn't support Scala 3. You might attempt to implement derivation via `magnolia` on your own, or else revert to writing instances manually.
 
 # Configuration management
 
