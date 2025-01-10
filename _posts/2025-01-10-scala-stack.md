@@ -21,7 +21,15 @@ This is also an Ode to all the people who quietly spent countless hours to bring
 
 # Language version
 
-Prior to this exercise I hand't done any Scala 3, personally or professionally. I've been reading and writing code for a while, so I figured picking up the new language version itself wouldn't be too much of a hassle. I was more worried whether all my libraries of choice would work with Scala 3, and in 2025 they all do, with a couple of exceptions I'll note in subsequent paragraphs. Those usually have adequate replacements, so for new **services**, I'd recommend defaulting to Scala 3.
+Prior to this exercise I hand't done any Scala 3, personally or professionally. I've been reading and writing code for a while now, so I figured picking up the new language version itself wouldn't be too much of a hassle. I was more worried whether all my libraries of choice would work with Scala 3, and in 2025 they all do, with a couple of exceptions I'll note in subsequent paragraphs. Those usually have adequate replacements, so for new **services**, I'd recommend defaulting to Scala 3.
+
+The reason I recommend Scala 3 for greenfield, service (not library) development is
+
+- For application / service programming, it appears to be at least a marginally better language than Scala 2. It's definitely not a worse one.
+- It's going to take a somewhat experienced Scala 2 developer 5-20 hours to get started with Scala 3, which is negligible in the long run
+- You'd probably be introducing future technical debt in your new project if you choose Scala 2 now.
+
+This recommendation comes with the huge caveat that I don't have Scala 3 experience with an extremely large codebase. I've previously worked on a project that took an hour to compile, and I cannot say if that hour is going to become 50 minutes or 3 hours if they made the switch.
 
 ## Language changes 
 
@@ -60,6 +68,8 @@ ThisBuild / scalacOptions ++= {
   }
 }
 ```
+
+If such a simplistic and limited approach does not work for you, take inspiration from established open source projects.
 
 # Enforcing code style
 
@@ -280,11 +290,13 @@ final case class Foo(
 
 ## `cats` instances
 
-Use [`kittens`](https://github.com/typelevel/kittens), which uses `shapeless3` under the hood. [`magnolify/cats`](https://github.com/spotify/magnolify/tree/main/cats/src) used to be an option, but at the time of writing it doesn't support Scala 3.
+Use [`kittens`](https://github.com/typelevel/kittens), which uses `shapeless3` under the hood. `kittens` supports Scala 3 `derives` clause - see their docs.
+
+[`magnolify/cats`](https://github.com/spotify/magnolify/tree/main/cats/src) used to be an option, but at the time of writing it doesn't support Scala 3.
 
 ## `scalacheck` instances
 
-As already pointed out, there's no good solution currently. [magnolify/scalacheck](https://github.com/spotify/magnolify/tree/main/scalacheck/src) used to be an option, but at the time of writing it doesn't support Scala 3. You might attempt to implement derivation via `magnolia` on your own, or else revert to writing instances manually.
+As already pointed out, there's no good solution currently. [`magnolify/scalacheck`](https://github.com/spotify/magnolify/tree/main/scalacheck/src) used to be an option, but at the time of writing it doesn't support Scala 3. You might attempt to implement derivation via `magnolia` on your own, or else revert to writing instances manually.
 
 # Configuration management
 
