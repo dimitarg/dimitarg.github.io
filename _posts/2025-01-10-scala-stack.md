@@ -17,9 +17,11 @@ Scala is a language where there's usually many ways to achieving a goal, and the
 
 Below we present an opinion piece of what a Scala stack can look like in 2025, if your favourite paradigm happens to be purely functional programming. Almost all of the options presented are not novel, and I've used them in services which are in production.
 
+This is also an Ode to all the people who quietly spent countless hours to bring us - for free - all the amazing open-source libraries we use (and take for granted!) every day. Thank you!
+
 # Language version
 
-Prior to this exercise I hand't done any Scala 3, personally or professionally. I've been reading and writing code for a while, so I figured picking up the new language version itself wouldn't be too much of a hassle. I was more worried whether all my libraries of choice would work with Scala 3, and in 2025 they all do, with a couple of exceptions I'll note in subsequent paragraphs. Those have adequate replacements, so for new **services**, I'd recommend defaulting to Scala 3.
+Prior to this exercise I hand't done any Scala 3, personally or professionally. I've been reading and writing code for a while, so I figured picking up the new language version itself wouldn't be too much of a hassle. I was more worried whether all my libraries of choice would work with Scala 3, and in 2025 they all do, with a couple of exceptions I'll note in subsequent paragraphs. Those usually have adequate replacements, so for new **services**, I'd recommend defaulting to Scala 3.
 
 ## Language changes 
 
@@ -35,7 +37,7 @@ I didn't find picking up language changes hard. My current personal and work pro
 
 You might be in the position of maintaining libraries that need to be used across Scala 2 and Scala 3 services.
 
-One way to solve this, if it works for you, is to code your libraries to a subset of Scala 2 that's also valid Scala 3. For me, this boiled down to `"-Xsource:3-cross"`, or, more completely:
+One way to solve this, if feasible for the code in question, is to code your libraries to a subset of Scala 2 that's also valid Scala 3. For me, this boiled down to `"-Xsource:3-cross"`, or, more completely:
 
 ```
 libraryDependencies ++= {
@@ -114,7 +116,7 @@ If you use an effect system, you want a test framework which is integrated with 
 
 I've settled for [`weaver-test`](https://github.com/disneystreaming/weaver-test), since it's based on `fs2` and composes nicely with the rest of the stack. It works well and I've used it on a number of projects. 
 
-In addition I use a micro-library I'm the author of, [weaver-test-extra](https://github.com/dimitarg/weaver-test-extra), to aid in purely functional test setup and teardown. (See the repo readme for reasoning, use and limitations).
+In addition I use a micro-library I'm the author of, [`weaver-test-extra`](https://github.com/dimitarg/weaver-test-extra), to aid in purely functional test setup and teardown. (See the repo readme for reasoning, use and limitations).
 
 `weaver-test` is in the process of being [transferred](https://github.com/typelevel/governance/issues/114) from `disneystreaming` to `typelevel`. I expect this to be a good thing, as it might receive more traction and more maintenance.
 
@@ -159,15 +161,82 @@ package object log:
   def defaultLogger[F[_]: Sync]: Logger[F] = consoleLogger[F](minLevel = Level.Info)
 ```
 
-An alternative to `odin` is [`woof`](https://github.com/LEGO/woof). The main difference is `woof` uses `IOLocal` [for context propagation](https://github.com/LEGO/woof/issues/130#issue-1573872587), whereas `odin` uses `ReaderT`. If you don't have [strong opinions](https://github.com/LEGO/woof/issues/130#issuecomment-2462239678) about this, or if you have no need for context propagation, either alternative is fine.
+An alternative to `odin` is [`woof`](https://github.com/LEGO/woof). The main difference is `woof` currently uses `IOLocal` for context propagation, whereas `odin` allows for a `ReaderT` / `Ask` implementation. If you don't have strong opinions about this, or if you have no need for context propagation, they can be viewed as mostly similar.
 
 # Observability / distributed tracing
 
-I find it's sloppy to write programs where the answer to "what went wrong" is log grepping, and the answer to "why is this so slow" is "I have no idea, let's do some log grepping and print out a bunch of `System.currentTimeMillis()` in addition".
+Observability means that while executing our program in production, we collect and persist data about the execution in a structured manner, so that we can answer questions about how the program is performing when things go awry.
 
-My current library of choice is [natchez](`https://github.com/typelevel/natchez`), because that's what my database library of choice currently uses. As an actual observability backend, I default to [Honeycomb](https://www.honeycomb.io/). No strong opinions here - I just find it pretty easy to work with, and the pricing feels reasonable.
+We're able to answer questions such as
 
-Library-wise, the landscape is a bit messy / fractured today. I think the community might eventually settle on `https://github.com/typelevel/otel4s` - I see that my database library has switched to that on its main, unreleased branch.
+- What was the user id of that request that ended with a 5xx
+- Where was time spent for the 1% slowest requests in the last hour
+- What's the latency distribution of X in this deployment versus the previous deployment
 
-# Optics
-TODO
+, without having to resort to hopeless log grepping and `println`s.
+
+If you're not already doing that, you should! It makes your life operating software in production a lot easier, and you end up with a better overall product.
+
+My current library of choice is [natchez](`https://github.com/typelevel/natchez`), because that's what my database library of choice currently uses. As an actual observability backend, I default to [Honeycomb](https://www.honeycomb.io/). No strong opinions here - I just find it pretty easy to work with, and the pricing feels reasonable. `natchez` has backend implementations for other popular platforms, including Datadog and AWS X-Ray.
+
+Library-wise, the landscape has historically been a bit messy / fractured. I think the community might eventually settle on `https://github.com/typelevel/otel4s` - I see that my database library has switched to that on its main, unreleased branch.
+
+# Refinement types
+
+## Primer 
+Refinement types are types with a predicate, such as (pseudocode)
+
+- `type PosInt = x: Int | x > 0`
+- `type ValidPort = x: Int | x >= 0 & x <= 65535`
+- `type Email = x: String | x matches ValidEmailRegex` 
+
+, and so forth.
+
+With refinement types, when using static data (literals), we're able to accept or reject a value at compile-time. Example (pseudocode): 
+
+```scala
+  val x: PosInt = 23 // compiles
+  val x: PosInt = -1 // compile-time error: -1 is not a PosInt since predicate GreaterThan(0) does not hold 
+```
+
+When we're dealing with dynamic data which might not fulfil the predicate, the possibility of error is reflected in the type:
+
+```scala
+  val x: Either[String, PosInt] = refine[PosInt](21)
+```
+In any case, invalid states are made unpresentable, which lets us model domain data types more precisely, and catch data errors earlier, in the outermost layers of our program.
+ 
+## Libraries
+
+Under scala 2.x, the go-to library for refinement types was [refined](https://github.com/fthomas/refined). Unfortunately, while the library is cross-published, compile-time refinement of literals with Scala 3 is [not possible](https://github.com/fthomas/refined/issues/932).
+
+The solution is to switch to [iron](https://github.com/Iltotore/iron), which provides both compile-time and runtime refinement but **only exists for Scala 3**.
+
+I believe this state of affairs makes the situation
+
+- OK for greenfield projects
+- Annoying for codebases migrating from Scala 2 to Scala 3, since switching out such a fundamental library while also switching the language version is a pretty big-bang refactoring
+- Very unfortunate for large codebases migrating from Scala 2 to Scala 3, for the same reasons aggravated by scale
+- I expect, extremely complicated for libraries which use refinement types and must be cross-published to Scala 2 and Scala 3
+
+There's good news though! `iron` is superior to `refined` in that refined types are subtypes of their base types, e.g. `Int :| Positive` is a subtype of `Int` (whereas `refined` uses wrapper types to represent refined types).
+
+This, along with the fact that conversions between the refined type and its base type are `inline`d, gives the capability, in many situations, to have zero runtime overhead when using refinement types.
+
+In addition, `iron` comes with integrations for your favourite libraries that you've come to love and expect, such as `circe`, `ciris`, `skunk`, `doobie`, `cats`, `tapir`, etc.
+
+# Typeclass derivation
+
+# Configuration management
+
+# Database connectivity
+
+# Database migrations
+
+# Cryptography
+
+# HTTP endpoint documentation
+
+# Others 
+
+# Further work
