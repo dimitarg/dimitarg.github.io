@@ -116,7 +116,7 @@ For core data types and abstractions, I've went with `cats`, and its companion `
 
 The other notable alternative is `zio`, which provides core abstractions and an effect system in one bundle. My recommendation is to use whatever you and your team are most productive with. If you are not yet invested in either, your evaluation must take into account whether all libraries you need exist / work well with your choice - lest you need something niche which exists in only one of the ecosystems. 
 
-I imagine in 99% of cases you'd be fine with either.
+I imagine in many cases you'd be fine with either.
 
 # Stream programming
 
@@ -314,6 +314,56 @@ Use [`kittens`](https://github.com/typelevel/kittens), which uses `shapeless3` u
 As already pointed out, there's no good solution currently. [`magnolify/scalacheck`](https://github.com/spotify/magnolify/tree/main/scalacheck/src) used to be an option, but at the time of writing it doesn't support Scala 3. You might attempt to implement derivation via `magnolia` on your own, or else revert to writing instances manually.
 
 # Configuration management
+
+App configuration is often the source of silly errors with sometimes drastic consequences. We want to utilise the compiler to catch most of them, and catch them as early as possible. A way to do this is to use Scala expressions for configuration as much as possible, and eschew file-based configuration formats.
+
+[ciris](https://cir.is/docs/overview) allows to build configurations as values, and later interpret them to an effect. Additionally, it supports refinement types, in our case through `iron-ciris`.
+
+```scala
+package yourproject.test.config
+
+import cats.implicits.*
+import ciris.*
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.ciris.given
+import io.github.iltotore.iron.constraint.numeric.Positive
+
+final case class LoadTestConfig(
+  poolSize: Int :| Positive,
+  testPoolSize: Int :| Positive
+)
+
+object LoadTestConfig:
+
+  val value: ConfigValue[Effect, LoadTestConfig] =
+    (
+      env("POOL_SIZE").as[Int :| Positive].default(32),
+      env("TEST_POOL_SIZE").as[Int :| Positive].default(32),
+    ).mapN { (poolSize, testPoolSize) =>
+      LoadTestConfig(
+        poolSize = poolSize,
+        testPoolSize = testPoolSize
+      )
+    }
+```
+
+`value` can then be loaded in your target effect type:
+
+```scala
+  val appConfig: IO[LoadTestConfig] = LoadTestConfig.value.load[IO]
+```
+
+In order to maximise compile-time checking, limit environment variable usage strictly to what's really variable for a given environment - i.e. users, passwords, hosts and ports injected by your Infrastructure as Code, etc. Use literals for everything else and they'll be checked at compile-time.
+
+```scala
+  // can't mess this up if it's static
+  val checked: LoadTestConfig = LoadTestConfig(
+    poolSize = 32,
+    testPoolSize = 0 // does not compile
+  )
+```
+
+There's community modules for `ciris` that you may find of use. For example, here's one dealing with [AWS Secrets](https://github.com/keirlawson/ciris-aws-secretsmanager).
 
 # Database connectivity
 
