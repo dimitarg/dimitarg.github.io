@@ -40,6 +40,7 @@ I didn't find picking up language changes hard. My current personal and work pro
 - Use `given / using` in place of `implicit`
 - Use `extension` in place of `implicit class`
 - Use `enum` in place of `sealed trait` whenever describing sum types. If my understanding is correct, this mostly works, however they currently don't have 100% feature parity. Specifically enums cannot nest enums. You can revert to `sealed trait` whenever facing issues, granted that's not great for consistency.
+- Use `opaque type` where you would have previously used [`@newtype`](https://github.com/estatico/scala-newtype) or wrapper types / value classes.
 
 > The above is, of course, by no means an exhausting list of language changes and new language features in Scala 3. Specifically it leaves out any new and changed type-level and metaprogramming facilities. We're mostly focused on slightly boring application programming in this article.
 
@@ -149,10 +150,6 @@ extension [A](gen: Gen[A])
   def sampleIO: IO[A] = sampleF[IO]
 ```
 
-### Deriving `Gen` and others
-
-Note at the time of writing `magnolify-scalacheck` [does not yet work with Scala 3](https://github.com/spotify/magnolify/pull/857). You might have to figure out your own way to derive `scalacheck` instances, or write them out manually. I don't currently have a solution to offer you.
-
 # Logging
 
 It's best to use a logging library which integrates with your effect system, and for sure you want to avoid ones that are bloated to the point they cause [severe security issues](https://en.wikipedia.org/wiki/Log4Shell).
@@ -189,9 +186,9 @@ We're able to answer questions such as
 
 If you're not already doing that, you should! It makes your life operating software in production a lot easier, and you end up with a better overall product.
 
-My current library of choice is [natchez](`https://github.com/typelevel/natchez`), because that's what my database library of choice currently uses. As an actual observability backend, I default to [Honeycomb](https://www.honeycomb.io/). No strong opinions here - I just find it pretty easy to work with, and the pricing feels reasonable. `natchez` has backend implementations for other popular platforms, including Datadog and AWS X-Ray.
+My current library of choice is [natchez](`https://github.com/typelevel/natchez`), because that's what my database library of choice uses on its release branch. As an actual observability backend, I default to [Honeycomb](https://www.honeycomb.io/). No strong opinions here - I just find it pretty easy to work with, and the pricing feels reasonable. `natchez` has backend implementations for other popular platforms, including Datadog and AWS X-Ray.
 
-Library-wise, the landscape has historically been a bit messy / fractured. I think the community might eventually settle on `https://github.com/typelevel/otel4s` - I see that my database library has switched to that on its main, unreleased branch.
+Library-wise, the landscape has historically been a bit messy / fractured. I think the community might eventually settle on `https://github.com/typelevel/otel4s` - I see that my database library has switched to that in its 1.0 milestone releases.
 
 # Refinement types
 
@@ -311,7 +308,11 @@ Use [`kittens`](https://github.com/typelevel/kittens), which uses `shapeless3` u
 
 ## `scalacheck` instances
 
-As already pointed out, there's no good solution currently. [`magnolify/scalacheck`](https://github.com/spotify/magnolify/tree/main/scalacheck/src) used to be an option, but at the time of writing it doesn't support Scala 3. You might attempt to implement derivation via `magnolia` on your own, or else revert to writing instances manually.
+[`magnolify/scalacheck`](https://github.com/spotify/magnolify/tree/main/scalacheck/src) used to be my go-to option, but at the time of writing it doesn't support Scala 3.
+
+While writing this article, I discovered [MartinHH/scalacheck-derived](https://github.com/MartinHH/scalacheck-derived). I haven't yet tested it on a project.
+
+You might otherwise attempt to implement derivation via `magnolia` on your own, or else revert to writing instances manually.
 
 # Configuration management
 
@@ -367,9 +368,55 @@ There's community modules for `ciris` that you may find of use. For example, her
 
 # Database connectivity
 
+Since 
+
+As a functionally inclined programmer using an effect system, you should look for a database library which is resource-safe. Hand-wavily, this means it should integrate with your effect system in the way you "expect it to". As an example, the following scenario should work:
+
+- A user calls an HTTP endpoint,
+- The endpoint logic triggers a very long running database query,
+- The user gives up waiting, for example via navigating away from the page or closing it,
+- Which triggers cancellation of your endpoint's processing,
+- Which triggers cancellation of the database query,
+  - Which closes associated database client resources such as sessions, connections, etc, **AND**
+  - Closes the associated **DB server** query / processes
+
+This is crucial. For example, the default PostgreSQL deployment has a limit of 100 open connections, so it might be pretty easy to bring down your whole system - including your database server - if the above does not hold.
+
+Apart from this, your library should have a low performance overhead. In particular, it should 
+
+- Allow you to write SQL yourself
+- Allow for efficient encoding, decoding and streaming
+- Provide connection pooling
+
+# DB connectivity for PostgreSQL
+
+If you use PostgreSQL and Scala you're in the right place. The de-facto standard [skunk](https://github.com/typelevel/skunk/)
+
+- Doesn't resort to JDBC, but uses the PostgreSQL [native protocol](https://www.postgresql.org/docs/current/protocol.html)
+- Uses non-blocking IO via `fs2.io` / `fs2.net`
+- Uses binary encoding via `scodec`
+- Has a resource-safe design, by relying on cats-effect and fs2 and not being constrained by JDBC
+- Has extremely good error messages
+- Has excellent observability, see "Observability" above 
+- Has support for `LISTEN` / `NOTIFY`
+
+`skunk` is now reasonably mature, nearing its `1.0` release and has an active and helpful community. It's used in production by a number of companies.
+
+# DB connectivity for other databases
+
+Use [doobie](https://github.com/typelevel/doobie), which is a purely functional API on top of JDBC.
+
+For connection pooling, use `doobie-hikari` and [`HikariCP`](https://github.com/brettwooldridge/HikariCP). Make sure the to read `doobie`'s documentation on connection management / threading and `HikariCP`'s documentation to arrive at a pool and execution context configuration which is suitable for production usage.
+
+One issue with JDBC-based libraries is that resource safety might be prohibitively hard to get right. As far as I can see though, the scenario I described at the start of this paragraph has been [addressed](https://github.com/typelevel/doobie/issues/1922) in `doobie`.
+
 # Database migrations
 
+- flyway with special measures
+- the skunk thing
+
 # Cryptography
+- tsec
 
 # HTTP endpoint documentation
 
