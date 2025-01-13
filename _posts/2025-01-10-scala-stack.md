@@ -368,8 +368,6 @@ There's community modules for `ciris` that you may find of use. For example, her
 
 # Database connectivity
 
-Since 
-
 As a functionally inclined programmer using an effect system, you should look for a database library which is resource-safe. Hand-wavily, this means it should integrate with your effect system in the way you "expect it to". As an example, the following scenario should work:
 
 - A user calls an HTTP endpoint,
@@ -377,7 +375,7 @@ As a functionally inclined programmer using an effect system, you should look fo
 - The user gives up waiting, for example via navigating away from the page or closing it,
 - Which triggers cancellation of your endpoint's processing,
 - Which triggers cancellation of the database query,
-  - Which closes associated database client resources such as sessions, connections, etc, **AND**
+  - Which releases associated database client resources such as sessions, connections, etc, **AND**
   - Closes the associated **DB server** query / processes
 
 This is crucial. For example, the default PostgreSQL deployment has a limit of 100 open connections, so it might be pretty easy to bring down your whole system - including your database server - if the above does not hold.
@@ -412,12 +410,33 @@ One issue with JDBC-based libraries is that resource safety might be prohibitive
 
 # Database migrations
 
-- flyway with special measures
-- the skunk thing
+[`flyway`](https://github.com/flyway/flyway) is the industry standard here. Calling this in Scala will work, as long as you're targeting the JVM as a runtime.
+
+```scala
+def migrate[F[_]: Sync](config: DatabaseConfig): F[Unit] = Sync[F].blocking {
+  val flyway = Flyway
+    .configure()
+    .dataSource(config.jdbcUrl, config.userName.value, config.password.value.value)
+    .load()
+  val _ = flyway.migrate()
+}
+```
+
+One problem with the above is it pulls in JDBC and corresponding drivers, which, if we're using PostgreSQL, we've successfully avoided so far. This is not a big problem *in practice*, if you're wise and package your DB migration code as a separate sbt module and a separate service / executable in your infrastructure as code / deployment. That way it can run and exit, and the rest of your services don't need to depend on the migration module or JDBC in their classpath or runtime.
+
+If this setup still bothers you, and you're using PostgreSQL, you can try [`dumbo`](https://github.com/rolang/dumbo), which is a Flyway-like library built on top of `skunk`.
 
 # Cryptography
-- tsec
 
+, sort of miscellaneous, but included in case it helps you.
+
+Java cryptography APIs are a notorious pain to work with. Many moons ago good samaritans created [`tsec`](https://github.com/jmcardon/tsec), but it's no longer maintained.
+
+Luckily, other good samaritans [forked](https://github.com/davenverse/tsec) the library and published it for Scala 3.
+
+Among the many interesting things I've found in `tsec` are `libsodium` support, and building blocks for an OAuth2 server implementation.
+
+I know of no other alternatives. Possibly there are none, because most of us are unqualified to work on cryptography and therefore unwilling to touch the subject even with a 50-foot pole.
 # HTTP endpoint documentation
 
 # Others 
