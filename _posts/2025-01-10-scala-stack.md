@@ -1,8 +1,9 @@
 ---
 title: "A 2025 Scala stack for the functionally inclined"
-date: 2023-01-09T10:00:00Z
+date: 2025-01-09T10:00:00Z
 published: true
 toc: true
+toc_sticky: true
 toc_label: "Contents"
 categories:
   - Functional Programming
@@ -388,7 +389,7 @@ Apart from this, your library should have a low performance overhead. In particu
 - Allow for efficient encoding, decoding and streaming
 - Provide connection pooling
 
-# DB connectivity for PostgreSQL
+## DB connectivity for PostgreSQL
 
 If you use PostgreSQL and Scala you're in the right place. The de-facto standard [skunk](https://github.com/typelevel/skunk/)
 
@@ -402,7 +403,7 @@ If you use PostgreSQL and Scala you're in the right place. The de-facto standard
 
 `skunk` is now reasonably mature, nearing its `1.0` release and has an active and helpful community. It's used in production by a number of companies.
 
-# DB connectivity for other databases
+## DB connectivity for other databases
 
 Use [doobie](https://github.com/typelevel/doobie), which is a purely functional API on top of JDBC.
 
