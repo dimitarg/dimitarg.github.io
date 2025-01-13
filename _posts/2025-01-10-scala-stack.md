@@ -2,6 +2,8 @@
 title: "A 2025 Scala stack for the functionally inclined"
 date: 2023-01-09T10:00:00Z
 published: true
+toc: true
+toc_label: "Contents"
 categories:
   - Functional Programming
   - Scala
@@ -434,7 +436,7 @@ Java cryptography APIs are a notorious pain to work with. Many moons ago good sa
 
 Luckily, other good samaritans [forked](https://github.com/davenverse/tsec) the library and published it for Scala 3.
 
-Among the many interesting things I've found in `tsec` are `libsodium` support, and building blocks for an OAuth2 server implementation.
+> Among the many interesting things I've found in `tsec` are `libsodium` support, and building blocks for an OAuth2 server implementation.
 
 I know of no other alternatives. Possibly there are none, because most of us are unqualified to work on cryptography and therefore unwilling to touch the subject even with a 50-foot pole.
 # HTTP endpoint documentation
