@@ -538,6 +538,25 @@ In terms of API documentation, `tapir` takes the approach of requiring us to des
 
 I don't yet have experience with `smithy4s`. I wonder if it's possible in practice to only use `1.` and `2.`, but code `3.` by hand, to partially address the concerns above.
 
-# Others 
+# Others
+
+A few libraries fall into the category of "others" since you've effectively already chosen them by opting for `cats-effect` and `fs2`. That is, they're so well established that, even though alternatives exist, you'd be sailing against the tide.
+
+- [`http4s`](https://github.com/http4s/http4s) for HTTP server and client programming. `http4s` has a core / interface, and a number of backends. Out of those, use `http4s-ember`, unless you have performance tests indicating otherwise.
+- [`fs2-kafka`](https://github.com/fd4s/fs2-kafka) for interfacing with Kafka.
 
 # Further work
+
+## Infrastructure as code
+
+I'm of the firm belief that infrastructure as code should be regular code as much as feasible, which means
+
+1. Using your host language (the language in which you write your services) when provisioning infrastructure and managing deployments, as opposed to using walls of YAML
+2. Using the same core abstractions and core data types in service code and IaC code
+3. Possibly reusing a set of datatypes between your service code and IaC code, to aid in threading configuration values between the two
+
+I've seen `1.` done successfully but never `2.` and `3.`. These would imply a `cats-effect` / `fs2` centric approach to working with infrastructure and deployments. I'd like to explore this topic further once I get the time.
+
+## Postgres change data capture
+
+It would be very cool to see Postgres Logical Replication support built on top of Skunk. This would allow for building purely functional data pipelines that currently utilise Kafka, Debezium and a host of proprietary technologies. In certain scenarios, such as populating and keeping ElasticSearch clusters up to date, I can imagine foregoing this extra infrastructure entirely, if we had an `fs2.Stream`-based API into PostgreSQL logical replication.
