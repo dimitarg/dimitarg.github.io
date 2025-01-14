@@ -231,9 +231,9 @@ I believe this state of affairs makes the situation
 - Very unfortunate for large codebases migrating from Scala 2 to Scala 3, for the same reasons aggravated by scale
 - I expect, extremely complicated for libraries which use refinement types and must be cross-published to Scala 2 and Scala 3
 
-There's good news though! `iron` is superior to `refined` in that refined types are subtypes of their base types, e.g. `Int :| Positive` is a subtype of `Int` (whereas `refined` uses wrapper types to represent refined types).
+There's good news though! `iron` is superior to `refined` in that refinement types are subtypes of their base types, e.g. `Int :| Positive` is a subtype of `Int` (whereas `refined` uses wrapper types to represent refinement types).
 
-This, along with the fact that conversions between the refined type and its base type are `inline`d, gives the capability, in many situations, to have zero runtime overhead when using refinement types.
+This, along with the fact that conversions between the refinement type and its base type are `inline`d, gives the capability, in many situations, to have zero runtime overhead when using refinement types.
 
 In addition, `iron` comes with integrations for your favourite libraries that you've come to love and expect, such as `circe`, `ciris`, `skunk`, `doobie`, `cats`, `tapir`, etc.
 
@@ -440,7 +440,103 @@ Luckily, other good samaritans [forked](https://github.com/davenverse/tsec) the 
 > Among the many interesting things I've found in `tsec` are `libsodium` support, and building blocks for an OAuth2 server implementation.
 
 I know of no other alternatives. Possibly there are none, because most of us are unqualified to work on cryptography and therefore unwilling to touch the subject even with a 50-foot pole.
+
 # HTTP endpoint documentation
+
+The general idea here is to separate description of HTTP endpoints from their implementation, so that we can use the descriptions to automatically generate OpenAPI documentation.
+
+I've used [`tapir`](https://tapir.softwaremill.com/en/latest/) for this on my past couple of projects. It's well established, is reasonably well documented and has integrations you'd expect, crucially `cats` instances and support for `iron` refinement types. As you'd expect, it supports request and response streaming and websockets.
+
+Here's a quick example for a *description* of a service residing at `GET v1/health`, that takes no input, and produces `HealthResponse` as output:
+
+```scala
+package your.rest.api
+import sttp.tapir.*
+import sttp.tapir.json.circe.*
+
+object HealthEndpoints:
+  val getHealth: Endpoint[Unit, Unit, Unit, HealthResponse, Any] =
+    base(name = "getHealth", desc = "Healthcheck for Tafto system")
+      .in("health")
+      .get
+      .out(jsonBody[HealthResponse])
+```
+
+The above is what's used to generate API docs automatically, and is also used as an interface for you to implement the actual server endpoint.
+
+
+A similar alternative is [`endpoints4s`](https://github.com/endpoints4s/endpoints4s). The main [difference](https://endpoints4s.github.io/comparison.html#rho-fintrospect-tapir) from `tapir` is `endpoints4s` has an extensible description language / algebra. In practice this means it's more modular and you could build new features on top of it that were not anticipated by the authors.
+
+A drawback of `endpoints4s` is it's a tad lighter in terms of ready-to-use integrations, perhaps on account of being less popular than `tapir`. For example, I was unable to find an `iron` integration from a cursory look.
+
+> I'd be interested to find a project in this category that's based around `FreeApplicative`, as that sounds like a suitable abstraction for "program descriptions as values".
+
+## Performance considerations
+
+Continuing the example from above, this is an implementation of the `GET v1/health` endpoint:
+
+```scala
+package your.rest.server
+
+import cats.effect.*
+import cats.implicits.*
+import your.rest.api.HealthEndpoints
+import your.rest.api.resources.HealthResponse
+import your.service.HealthService
+
+final case class HealthEndpointsImpl[F[_]: Concurrent](
+    healthService: HealthService[F]
+):
+  val getHealth =
+    HealthEndpoints.getHealth // the description from the previous listing
+    .serverLogicSuccess { _ =>
+      healthService.getHealth.as(HealthResponse("Service is healthy."))
+    }
+```
+
+The value `HealthEndpointsImpl.getHealth` has the (somewhat daunting) type
+
+```scala
+sttp.tapir.server.ServerEndpoint.ServerEndpoint[Any, F]{
+  type SECURITY_INPUT = Unit
+  type PRINCIPAL = Unit
+  type INPUT = Unit
+  type ERROR_OUTPUT = Unit
+  type OUTPUT = HealthResponse
+}
+```
+
+The point being, this is a server library-agnostic type that needs to be interpreted, at runtime, to the specific representation your HTTP server library uses, in our case `http4s`:
+
+```scala
+val healthImpl = HealthEndpointsImpl[F](healthService)
+// interpretation to http4s-specific implementation, provided by `tapir`
+val allRoutes: org.http4s.HttpRoutes[F] = Http4sServerInterpreter[F]().toRoutes(List(
+  healthImpl.getHealth,
+))
+```
+
+It's a fact of life that the above interpretation cannot come at zero cost, as there's datatype conversions happening, memory allocation, etc. An endpoint written in this way will **always** have worse latency that the equivalent written out by hand with the `http4s` API. This is statistically likely to not matter to your project at all, but it's still something to be aware of.
+
+## Conceptual considerations
+
+In the exact same vein as above, endpoints written in the above way are built using `sttp.tapir` / `sttp.model` and no longer via `org.http4s` datatypes. This means we've gained the capability to automatically generate REST API documentation at the expense of losing access to our low level HTTP programming API.
+
+In practice this means that if we need to implement HTTP protocol concepts not anticipated by the `tapir` authors, and therefore need direct control over request and response entities and their handling, we might find ourselves jumping through hoops to do so.
+
+All this is to say everything in life comes at a cost, and these costs must be acknowledged when making technology choices.
+
+## Alternative approaches
+
+In terms of API documentation, `tapir` takes the approach of requiring us to describe API in terms of scala values, and generates `OpenAPI` specs out of that.
+
+[`smithy4s`](https://github.com/disneystreaming/smithy4s) takes an alternative approach:
+
+1. We define our endpoint descriptions in a separate interface definition language (The Smithy IDL). If you've used gRPC (or old enough to remember WSDL) you might be familiar with the concept.
+2. `smithy4s` build-time tooling generates *protocol-agnostic* service stubs from your interface definitions, that you then implement
+3. `smithy4s` library code can interpret at runtime your services to a specific server technology, such as `http4s`
+
+I don't yet have experience with `smithy4s`. I wonder if it's possible in practice to only use `1.` and `2.`, but code `3.` by hand, to partially address the concerns above.
 
 # Others 
 
