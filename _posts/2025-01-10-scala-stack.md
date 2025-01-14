@@ -14,21 +14,21 @@ tags:
   - fs2
 ---
 
-I recently started a new Scala project, one which is greenfield. Building something new from the ground up poses the need - and opportunity - to make technology choices.
+I recently started a greenfield Scala project. Building something new from the ground up poses the need - and opportunity - to make technology choices.
 
 Scala is a language where there's usually many ways to achieving a goal, and the same can be said for Scala libraries. This is a good thing because it gives options, and somewhat daunting, because it's time-consuming to arrive at a set where all the pieces are good, and work well when put together.
 
-Below we present an opinion piece of what a Scala stack can look like in 2025, if your favourite paradigm happens to be purely functional programming. Almost all of the options presented are not novel, and I've used them in services which are in production.
+Below is an opinion piece of what a Scala-based library stack can look like in 2025, if your favourite paradigm happens to be purely functional programming. Almost all of the options presented are not novel, and I've used them in services which are in production.
 
-This is also an Ode to all the people who quietly spent countless hours to bring us - for free - all the amazing open-source libraries we use (and take for granted!) every day. Thank you!
+This is also an Ode to all the people who quietly spend countless hours to bring us - for free - all the amazing open-source libraries we use and take for granted every day. Thank you!
 
 # Language version
 
-Prior to this exercise I hand't done any Scala 3, personally or professionally. I've been reading and writing code for a while now, so I figured picking up the new language version itself wouldn't be too much of a hassle. I was more worried whether all my libraries of choice would work with Scala 3, and in 2025 they all do, with a couple of exceptions I'll note in subsequent paragraphs. Those usually have adequate replacements, so for new **services**, I'd recommend defaulting to Scala 3.
+Prior to my new project, I hand't written any Scala 3. I was sure picking up the new language version itself wouldn't be hard. I was more worried if all my libraries of choice would continue to work, and in 2025 they all do, with a couple of exceptions I'll note in subsequent paragraphs. Those usually have adequate replacements, so for new **services**, I think defaulting to Scala 3 is an adequate choice.
 
-The reason I recommend Scala 3 for greenfield, service (not library) development is
+I say this in the context of greenfield, service (not library) development, and the reasons are
 
-- For application / service programming, it appears to be at least a marginally better language than Scala 2. It's definitely not a worse one.
+- For application / service programming, Scala 3 seems to be at least a marginally better language than Scala 2. It's definitely not a worse one.
 - It's going to take a somewhat experienced Scala 2 developer 5-20 hours to get started with Scala 3, which is negligible in the long run
 - You'd probably be introducing future technical debt in your new project if you choose Scala 2 now.
 
@@ -36,7 +36,7 @@ This recommendation comes with the huge caveat that I don't have Scala 3 experie
 
 ## Language changes 
 
-I didn't find picking up language changes hard. My current personal and work projects try to stick to a relatively small subset of Scala that's purely functional, and all compile with `-Xsource:3`, so the transition was mostly painless. Here's what I gradually did while building my new project.
+Most of my personal and work projects try to stick to a relatively small subset of Scala that's purely functional, and compile with `-Xsource:3`, so the transition was pretty painless. Once I was up and running, here's what I gradually did:
 
 - Pick up new control flow syntax - not mandatory (with Scala `3.3.4`) and can be automated, as described later. This mostly boiled down to writing `if a then foo else bar` in place of `if (a) foo else bar`
 - Stop writing optional braces - not mandatory and can be automated, as described later.
@@ -87,7 +87,7 @@ addSbtPlugin("org.typelevel" % "sbt-tpolecat" % "0.5.2")
 
 ## scalafmt
 
-I find myself being inconsistent with regards to optional brace usage and new control flow syntax usage. The bigger the squad, the bigger the inconsistencies will be. You can enforce this via tooling. In my `.scalafmt.conf`, I've settled for
+I find myself being inconsistent with regards to optional brace usage and new control flow syntax usage. The bigger the squad, the greater inconsistencies will accrue. You can solve this via tooling. In my `.scalafmt.conf`, I've settled for
 
 ```
 version = 3.8.3
@@ -112,9 +112,11 @@ OrganizeImports.removeUnused = false
 OrganizeImports.groupedImports = Merge
 ```
 
+The exact configuration you'd pick will be up to needs and taste. The point is to let a machine handle the rest.
+
 # Core abstractions and effect system
 
-Core abstractions buy us the capability to not repeat ourselves, and effect systems help us increase program correctness, build resource-safe and cancellation-safe code, and write parallel and concurrent programs in a concise and safe manner.
+Core abstractions buy us the capability to not repeat ourselves. Effect systems help us increase program correctness, build resource-safe and cancellation-safe code, and write parallel and concurrent programs in a concise and safe manner.
 
 For core data types and abstractions, I've went with `cats`, and its companion `cats-effect` as an effect system.
 
@@ -124,7 +126,7 @@ I imagine in many cases you'd be fine with either.
 
 # Stream programming
 
-`cats-effect`-based projects have settled on `fs2`. It's mature, feature-rich, has an amazing community on Discord, and libraries for many technologies you may need exist that are built on top of it. That last part is extremely handy, because it makes your whole stack compose together well, when individual pieces are picked with care.
+`cats-effect`-based projects have settled on `fs2`. It's mature, feature-rich, has an amazing community on Discord, and is a building block and lingua franca for many higher-level libraries. This is extremely handy as it makes your whole stack compose together well, if individual pieces are picked with care.
 
 # Testing
 
@@ -243,8 +245,8 @@ In addition, `iron` comes with integrations for your favourite libraries that yo
 
 This is by no means critical, since you can always write your own instances, but it's handy and makes programs more terse. It's also good practice as a programmer to automate what you can, because sometimes the most hard to diagnose mistakes are found in boring, seemingly hard to get wrong code.
 
-The situation here has historically been somewhat messy because of the matrix of
-- Multiple base mechanisms to implement typeclass derivation (chiefly `shapeless` and `magnolia`)
+The situation has historically been messy because of the matrix of
+- Multiple base mechanisms to implement typeclass derivation (`shapeless` and `magnolia`)
 - Multiple flavours / ways of typeclass derivation used by the target libraries that you want to derive instances for ("semi-auto", "full-auto", etc)
 
 Out of the mechanisms, `magnolia` is preferred over `shapeless` in Scala 2, because of the superior (compile-time) performance.
@@ -255,9 +257,9 @@ I believe the situation might have gotten even more colourful with Scala 3, as e
 There are five options for type class derivation on Scala 3.
 ```
 
-Rightly so, because Scala 3 provides a basic typeclass derivation mechanism itself, and syntax sugar for typeclass derivation at the call site.
+Rightfully so, because Scala 3 provides a basic typeclass derivation mechanism itself, and syntax sugar for typeclass derivation at the call site.
 
-Below follow options for specific libraries. I haven't yet had a chance to test these out on large-scale codebases, so your mileage (and compile times) may vary.
+Below follow options for specific libraries. I haven't yet had a chance to test these out in large-scale codebases, so your mileage (and compile times) may vary.
 
 
 ## `circe` instances
@@ -360,7 +362,6 @@ object LoadTestConfig:
 In order to maximise compile-time checking, limit environment variable usage strictly to what's really variable for a given environment - i.e. users, passwords, hosts and ports injected by your Infrastructure as Code, etc. Use literals for everything else and they'll be checked at compile-time.
 
 ```scala
-  // can't mess this up if it's static
   val checked: LoadTestConfig = LoadTestConfig(
     poolSize = 32,
     testPoolSize = 0 // does not compile
@@ -391,7 +392,9 @@ Apart from this, your library should have a low performance overhead. In particu
 
 ## DB connectivity for PostgreSQL
 
-If you use PostgreSQL and Scala you're in the right place. The de-facto standard [skunk](https://github.com/typelevel/skunk/)
+If you use PostgreSQL and Scala you're in the right place.
+
+[skunk](https://github.com/typelevel/skunk/) is a library that
 
 - Doesn't resort to JDBC, but uses the PostgreSQL [native protocol](https://www.postgresql.org/docs/current/protocol.html)
 - Uses non-blocking IO via `fs2.io` / `fs2.net`
@@ -473,7 +476,7 @@ A drawback of `endpoints4s` is it's a tad lighter in terms of ready-to-use integ
 
 ## Performance considerations
 
-Continuing the example from above, this is an implementation of the `GET v1/health` endpoint:
+Continuing the `tapir` example from above, this is an implementation of the `GET v1/health` endpoint:
 
 ```scala
 package your.rest.server
@@ -506,7 +509,7 @@ sttp.tapir.server.ServerEndpoint.ServerEndpoint[Any, F]{
 }
 ```
 
-The point being, this is a server library-agnostic type that needs to be interpreted, at runtime, to the specific representation your HTTP server library uses, in our case `http4s`:
+The point being, this is a type agnostic to a specific HTTP server library. It needs to be interpreted, at runtime, to a specific representation, in our case `http4s`:
 
 ```scala
 val healthImpl = HealthEndpointsImpl[F](healthService)
@@ -522,7 +525,7 @@ It's a fact of life that the above interpretation cannot come at zero cost, as t
 
 In the exact same vein as above, endpoints written in the above way are built using `sttp.tapir` / `sttp.model` and no longer via `org.http4s` datatypes. This means we've gained the capability to automatically generate REST API documentation at the expense of losing access to our low level HTTP programming API.
 
-In practice this means that if we need to implement HTTP protocol concepts not anticipated by the `tapir` authors, and therefore need direct control over request and response entities and their handling, we might find ourselves jumping through hoops to do so.
+In practice this means that if we need to implement HTTP protocol concepts not anticipated by the `tapir` authors, and therefore need direct control over request and response entities and their handling, we might find ourselves jumping through hoops.
 
 All this is to say everything in life comes at a cost, and these costs must be acknowledged when making technology choices.
 
@@ -540,7 +543,7 @@ I don't yet have experience with `smithy4s`. I wonder if it's possible in practi
 
 # Others
 
-A few libraries fall into the category of "others" since you've effectively already chosen them by opting for `cats-effect` and `fs2`. That is, they're so well established that, even though alternatives exist, you'd be sailing against the tide.
+A few libraries fall into the category of "others" since you've effectively already chosen them by opting for `cats-effect` and `fs2`. That is, they're so well established that, even though alternatives might exist, you'd be sailing against the tide with them.
 
 - [`http4s`](https://github.com/http4s/http4s) for HTTP server and client programming. `http4s` has a core / interface, and a number of backends. Out of those, use `http4s-ember`, unless you have performance tests indicating otherwise.
 - [`fs2-kafka`](https://github.com/fd4s/fs2-kafka) for interfacing with Kafka.
@@ -549,9 +552,9 @@ A few libraries fall into the category of "others" since you've effectively alre
 
 ## Infrastructure as code
 
-I'm of the firm belief that infrastructure as code should be regular code as much as feasible, which means
+I've written my share of YAML, Helm templates and Terraform, and am now of the firm belief that infrastructure as code should be regular code as much as feasible, which means
 
-1. Using your host language (the language in which you write your services) when provisioning infrastructure and managing deployments, as opposed to using walls of YAML
+1. Using your host language (the language in which you write your services) when provisioning infrastructure and managing deployments, as opposed to using hopeless walls of YAML
 2. Using the same core abstractions and core data types in service code and IaC code
 3. Possibly reusing a set of datatypes between your service code and IaC code, to aid in threading configuration values between the two
 
@@ -559,4 +562,6 @@ I've seen `1.` done successfully but never `2.` and `3.`. These would imply a `c
 
 ## Postgres change data capture
 
-It would be very cool to see Postgres Logical Replication support built on top of Skunk. This would allow for building purely functional data pipelines that currently utilise Kafka, Debezium and a host of proprietary technologies. In certain scenarios, such as populating and keeping ElasticSearch clusters up to date, I can imagine foregoing this extra infrastructure entirely, if we had an `fs2.Stream`-based API into PostgreSQL logical replication.
+It would be great to see Postgres Logical Replication support built on top of Skunk. This would allow for building purely functional data pipelines that currently utilise Kafka, Debezium and a host of proprietary technologies.
+
+In certain scenarios, such as populating and keeping ElasticSearch clusters up to date, I can imagine foregoing this extra infrastructure entirely, if we had an `fs2.Stream`-based API into PostgreSQL logical replication.
