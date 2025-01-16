@@ -11,6 +11,8 @@ tags:
   - messaging
 ---
 
+This post is under construction.
+
 # Summary
 
 Depending on the usecase, it's possible to build a production-grade, near-realtime messaging system on top of just PostgreSQL, foregoing messaging middlewares such as Kafka entirely. This will take a certain amount of care, so while it can be simple it might not be that easy. After all, you'd be venturing off the beaten path.
@@ -114,3 +116,5 @@ Before setting out to crank out code, it's useful to contemplate what we want to
 Our implementation language of choice will be `Scala`. Necessarily, a number of library choices need to be made - I've went for tried and tested ones which are suitable for production usage. Crucially, we use `skunk` which supports the native PostgreSQL backend / frontend protocol, and has good support for `LISTEN` / `NOTIFY`.
 
 I won't expand much more on the libraries used, lest this article turn into a book. For an overview of them, see [this article](../scala-stack).
+
+// TODO

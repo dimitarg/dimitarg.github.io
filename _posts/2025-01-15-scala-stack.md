@@ -1,6 +1,6 @@
 ---
 title: "A 2025 Scala stack for the functionally inclined"
-date: 2025-01-09T10:00:00Z
+date: 2025-01-15T10:00:00Z
 published: true
 toc: true
 toc_sticky: true
