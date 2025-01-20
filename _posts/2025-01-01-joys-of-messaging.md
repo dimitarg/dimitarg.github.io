@@ -311,7 +311,10 @@ private def notify(s: Session[F], ids: List[EmailMessage.Id]): F[Unit] =
   val channel = s.channel(channelId)
   ids.traverse_(x => channel.notify(x.show))
 ```
-, where the actual insert query is
+
+We're using batch insert to schedule messages, in a bid to increase producer throughput. On the other hand, we've had to publish notifications one by one, which means N network roundtrips for N messages. We'll revise this later.
+
+Then, our actual insert query is
 
 ```scala
 def insertMessages(size: Int) =
@@ -322,4 +325,6 @@ def insertMessages(size: Int) =
   """.query(emailMessageId)
 ```
 
-> We're omitting database codecs (`insertEmailEncoder`, `emailMessageId`), and from here on I'll skip any other non-essential details.
+Nothing to see here.
+
+> We're omitting database codecs (`insertEmailEncoder`, `emailMessageId`), and from here on I'll skip any other non-essential details. All the code we'll eventually arrive at is published in a repository linked at the end of this article.
