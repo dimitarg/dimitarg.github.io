@@ -119,7 +119,7 @@ I won't expand much more on the libraries used, lest this article turn into a bo
 
 # Initial attempt
 
-The general plan is we'll do some evolutionary prototyping of our service, starting with a very simple sketch that can get us to a rudimentary but passing test suite quick. Then we'll go back to design goals, add missing features, write performance tests, rinse and repeat.
+The general plan is we'll do some evolutionary prototyping of our service, starting with a very simple sketch that can get us to a rudimentary but passing test suite quick. Then we'll go back to design goals, add missing features, write performance tests, optimise, rinse and repeat.
 
 We'll start with the core data types and SQL model for email messaging.
 
@@ -188,3 +188,138 @@ create table email_messages(
 
 The "created at" field is for audit and monitoring purposes, and the "updated at" one will aid us down the line in ensuring eventual at-least-once delivery.
 
+## Database interaction protocol
+
+Our initial service will consist of two logical components.
+
+- A producer, which will be responsible for receiving new email messages (via HTTP endpoint or other programmatic request), scheduling them for sending, and notifying consumers of the new messages via PostgreSQL `NOTIFY`
+- One or many (see "high-availability") consumer processes which receive new messages via `LISTEN`, claim them for processing, and are then responsible to send them out via SMTP, and record the success or failure of that attempt.
+
+Here's a set of database-level operations that we'll use to implement the above.
+
+```scala
+trait EmailMessageRepo[F[_]]:
+
+  def scheduleMessages(messages: NonEmptyList[EmailMessage]): F[List[EmailMessage.Id]]
+
+  def listen: Stream[F, EmailMessage.Id]
+
+  def claim(id: EmailMessage.Id): F[Option[EmailMessage]]
+  def markAsSent(id: EmailMessage.Id): F[Boolean]
+  def markAsError(id: EmailMessage.Id, error: String): F[Boolean]
+
+```
+
+`scheduleMessages` is what will be called by the producer. This records new messages in the database, and is also responsible for publishing these to the consumer via `NOTIFY`, only upon transaction success.
+
+`listen` is the entry point for the consumer, implemented via PG `LISTEN` (the `Stream` type here is `fs2.Stream`). Then, for each message received, the consumer
+- Attempts to `claim` the message for processing. Note the return type, `F[Option[EmailMessage]]`. Remember there can be multiple consumers running and the message might have already been claimed by another consumer by the time it's received, in which case there's nothing to do and we just move on to the next one.
+- Sends the message downstream (i.e. SMTP), and records that in the database via `markAsSent`. Note the return type, `F[Boolean]`. `false` indicates either this message doesn't exist, or that it's already been marked as sent (or as error) - in the latter case, we've observed more-than-once delivery, which we want to avoid as much as possible.
+- In case of downstream error, we record that in the database via `markAsError`. Again, the return type is `F[Boolean]` and `false` can indicate duplicate delivery.
+
+## Database internals
+
+First, a small utility layer around `skunk`. This allows us to execute transactions with a bit less boilerplate, gives us a utility function for batch insertion, and to obtain a `LISTEN` subscription where the underlying database session is part of the resulting stream's scope. 
+
+```scala
+package tafto.persist
+import cats.implicits.*
+import fs2.Stream
+import skunk.*
+import skunk.data.{Identifier, Notification}
+import cats.effect.*
+import cats.effect.std.Console
+import tafto.config.DatabaseConfig
+import fs2.io.net.Network
+import natchez.Trace
+import cats.data.NonEmptyList
+import cats.Applicative
+
+final case class Database[F[_]: MonadCancelThrow](pool: Resource[F, Session[F]]):
+
+  def transact[A](body: Session[F] => F[A]): F[A] =
+    val transactionalSession = for {
+      session <- pool
+      transaction <- session.transaction
+    } yield (session, transaction)
+    transactionalSession.use { case (session, _) =>
+      body(session)
+    }
+
+  def subscribeToChannel(channelId: Identifier): Stream[F, Notification[String]] =
+    Stream.resource(pool).flatMap { session =>
+      session.channel(channelId).listen(Database.notificationQueueSize)
+    }
+
+object Database:
+  // error is raised if query has more than 32767 parameters
+  // this batch size allows for ~65 query parameters per row, which should be plenty
+  val batchSize = 500
+  // this is up to ~80MB memory under the default PG configuration (each message cannot exceed 8000 bytes)
+  val notificationQueueSize = 10000
+
+  def batched[F[_]: Applicative, A, B](
+      s: Session[F]
+  )(query: Int => Query[List[A], B])(in: NonEmptyList[A]): F[List[B]] = {
+    val inputBatches = in.toList.grouped(batchSize).toList
+    inputBatches
+      .traverse { xs =>
+        s.execute(query(xs.size))(xs)
+      }
+      .map(_.flatten)
+  }
+
+  def make[F[_]: Temporal: Trace: Network: Console](config: DatabaseConfig): Resource[F, Database[F]] =
+    Session
+      .pooled[F](
+        host = config.host.value,
+        port = config.port.value,
+        user = config.userName.value,
+        password = config.password.value.value.some,
+        database = config.database.value,
+        max = 10,
+        strategy = Strategy.SearchPath
+      )
+      .map(Database(_))
+```
+
+We're ready to implement `EmailMessageRepo` which we defined above.
+
+
+```scala
+final case class PgEmailMessageRepo[F[_]: Clock: MonadCancelThrow](
+    database: Database[F],
+    channelId: Identifier
+) extends EmailMessageRepo[F]:
+```
+
+`scheduleMessages` is pretty straightforward:
+
+```scala
+override def scheduleMessages(messages: NonEmptyList[EmailMessage]): F[List[EmailMessage.Id]] =
+  database.transact { s =>
+    for
+      now <- Time[F].utc
+      result <- Database.batched(s)(EmailMessageQueries.insertMessages)(messages.map { x =>
+        (x, EmailStatus.Scheduled, now)
+      })
+      _ <- notify(s, result)
+    yield result
+  }
+
+private def notify(s: Session[F], ids: List[EmailMessage.Id]): F[Unit] =
+  val channel = s.channel(channelId)
+  ids.traverse_(x => channel.notify(x.show))
+```
+, where the actual insert query is
+
+```scala
+def insertMessages(size: Int) =
+  sql"""
+    insert into email_messages(subject, to_, cc, bcc, body, status, created_at)
+    values ${insertEmailEncoder.values.list(size)}
+    returning id;
+  """.query(emailMessageId)
+```
+
+> We're omitting database codecs (`insertEmailEncoder`, `emailMessageId`), and from here on I'll skip any other non-essential details.
