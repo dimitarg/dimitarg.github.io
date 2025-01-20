@@ -117,4 +117,74 @@ Our implementation language of choice will be `Scala`. Necessarily, a number of 
 
 I won't expand much more on the libraries used, lest this article turn into a book. For an overview of them, see [this article](../scala-stack).
 
-// TODO
+# Initial attempt
+
+The general plan is we'll do some evolutionary prototyping of our service, starting with a very simple sketch that can get us to a rudimentary but passing test suite quick. Then we'll go back to design goals, add missing features, write performance tests, rinse and repeat.
+
+We'll start with the core data types and SQL model for email messaging.
+
+## Data model
+
+Email messages have a set of recipients, a subject and a body. For sake of terseness, we won't deal with attachments right now.
+
+```scala
+final case class EmailMessage(
+    subject: Option[NonEmptyString],
+    to: List[Email],
+    cc: List[Email],
+    bcc: List[Email],
+    body: Option[NonEmptyString]
+)
+```
+
+For clarity, `NonEmptyString` is a string with a minimum length of 1, enforced through `iron` refinement types.
+
+```scala
+type NonEmpty = MinLength[1]
+type NonEmptyString = String :| NonEmpty
+object NonEmptyString extends RefinedTypeOps.Transparent[NonEmptyString]
+```
+
+, and `Email` represents an email address. For the time being that will just be a non-empty string. A production-grade implementation would involve regex matching, which `iron` allows for.
+
+
+```scala
+opaque type Email = NonEmptyString
+object Email extends RefinedTypeOps[String, NonEmpty, Email]
+```
+
+Once an email message is scheduled for delivery in our system, it gets an unique identifier.
+
+```scala
+object EmailMessage:
+  opaque type Id = Long :| Pure // `Pure` means always True, i.e. just `newtype` over `Long`
+```
+
+Once an email message is scheduled, it's claimed for processing. The processing can either succeed (the message was accepted by the downstream SMTP server), or it can fail.
+
+```scala
+enum EmailStatus:
+  case Scheduled, Claimed, Sent, Error
+```
+
+These are all the domain types we'll work with. We need a corresponding PostgreSQL representation:
+
+```sql
+create type email_status as enum ('scheduled', 'claimed', 'sent', 'error');
+
+create table email_messages(
+  id bigserial primary key,
+  subject text,
+  to_ text[] not null,
+  cc text[] not null,
+  bcc text[] not null,
+  body text,
+  status email_status,
+  error text,
+  created_at timestamptz not null,
+  last_updated_at timestamptz
+);
+```
+
+The "created at" field is for audit and monitoring purposes, and the "updated at" one will aid us down the line in ensuring eventual at-least-once delivery.
+
