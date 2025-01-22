@@ -312,7 +312,7 @@ private def notify(s: Session[F], ids: List[EmailMessage.Id]): F[Unit] =
   ids.traverse_(x => channel.notify(x.show))
 ```
 
-We're using batch insert to schedule messages, in a bid to increase producer throughput. On the other hand, we've had to publish notifications one by one, which means N network roundtrips for N messages. We'll revise this later.
+We're using batch insert to schedule messages to increase producer throughput. On the other hand, we've had to publish notifications one by one, which means N network roundtrips for N messages. We'll revise this later.
 
 Then, our actual insert query is
 
@@ -328,3 +328,97 @@ def insertMessages(size: Int) =
 Nothing to see here.
 
 > We're omitting database codecs (`insertEmailEncoder`, `emailMessageId`), and from here on I'll skip any other non-essential details. All the code we'll eventually arrive at is published in a repository linked at the end of this article.
+
+`listen` is also unremarkable, it creates a database session, issues `LISTEN` on the corresponding channel id, and decodes the incoming PostgreSQL string payload to `EmailMessage.Id`.
+
+```scala
+override val listen: Stream[F, EmailMessage.Id] =
+  database
+    .subscribeToChannel(channelId)
+    .evalMap { notification =>
+      val payload = notification.value
+      payload.toLongOption
+        .toRight(s"Expect EmailMessage.Id, got ${payload}")
+        .map(EmailMessage.Id(_))
+        .orThrow[F]
+    }
+```
+
+Next, on to `claim`, `markAsSent`, and `markAsError`. All these update the `status` of the corresponding DB row, where
+- We should only be able to claim a message if it's currently scheduled
+- Marking a message as error or as success should only go through if the message is currently claimed
+
+This is a finite state machine, we'll model it with the following datatype
+
+```scala
+final case class UpdateStatus private (
+  id: EmailMessage.Id,
+  currentStatus: EmailStatus,
+  newStatus: EmailStatus,
+  updatedAt: OffsetDateTime
+)
+
+object UpdateStatus:
+  def claim(id: EmailMessage.Id, updatedAt: OffsetDateTime) = UpdateStatus(
+    id = id,
+    currentStatus = EmailStatus.Scheduled,
+    newStatus = EmailStatus.Claimed,
+    updatedAt = updatedAt
+  )
+  def markAsSent(id: EmailMessage.Id, updatedAt: OffsetDateTime) = UpdateStatus(
+    id = id,
+    currentStatus = EmailStatus.Claimed,
+    newStatus = EmailStatus.Sent,
+    updatedAt = updatedAt
+  )
+  def markAsError(id: EmailMessage.Id, updatedAt: OffsetDateTime) = UpdateStatus(
+    id = id,
+    currentStatus = EmailStatus.Claimed,
+    newStatus = EmailStatus.Error,
+    updatedAt = updatedAt
+  )
+```
+
+(Equivalently you could encode this as an ADT)
+
+Now we can implement `claim` in terms of the above:
+
+```scala
+override def claim(id: EmailMessage.Id): F[Option[EmailMessage]] =
+  Time[F].utc.flatMap { now =>
+    updateStatusReturning(UpdateStatus.claim(id, now))
+  }
+
+private def updateStatusReturning(updateStatus: UpdateStatus): F[Option[EmailMessage]] =
+  database.pool.use { s =>
+    for
+      query <- s.prepare(EmailMessageQueries.updateStatusReturning)
+      result <- query.option(updateStatus)
+    yield result
+  }
+```
+
+The corresponding query we end up with is
+
+```scala
+val updateStatusReturning = sql"""
+  with ids as (
+    select id from email_messages where id=${emailMessageId} and status=${emailStatus}
+    for update skip locked
+  )
+  update email_messages m set status=${emailStatus}, last_updated_at=${timestamptz}
+  from ids
+  where m.id = ids.id
+  returning subject, to_, cc, bcc, body;
+  """.query(domainEmailMessageCodec).contramap[UpdateStatus] { updateStatus =>
+    (updateStatus.id, updateStatus.currentStatus, updateStatus.newStatus, updateStatus.updatedAt)
+  }
+```
+
+There's a couple of things above worth expanding on.
+- We only update a row if its id matches **and** it has the expected `currentStatus`, encoding the state machine from above. This helps avoid duplicate claiming, or duplicate marking as sent / error in case of multiple concurrent consumers.
+- `select ... for update skip locked` means if a message is in the process of being claimed by another consumer, we'll skip over it without waiting. This makes sense, since chances are it'll be processed by the other consumer anyway and the wait would have been unnecessary. This eliminates row-level lock contention, and will become especially handy once we decide to claim multiple messages in a batch. On the other hand, this provides an inconsistent view of the data: if another consumer has locked the row and we skip it, but that consumer's transaction eventually rolls back, that message will be lost - i.e. claimed by no consumer. Think of this as a very rare corner case, which we will address later.
+
+`markAsSent` and `markAsError` are implemented in the exact same vein.
+
+
