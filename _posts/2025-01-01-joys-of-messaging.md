@@ -417,8 +417,244 @@ val updateStatusReturning = sql"""
 
 There's a couple of things above worth expanding on.
 - We only update a row if its id matches **and** it has the expected `currentStatus`, encoding the state machine from above. This helps avoid duplicate claiming, or duplicate marking as sent / error in case of multiple concurrent consumers.
-- `select ... for update skip locked` means if a message is in the process of being claimed by another consumer, we'll skip over it without waiting. This makes sense, since chances are it'll be processed by the other consumer anyway and the wait would have been unnecessary. This eliminates row-level lock contention, and will become especially handy once we decide to claim multiple messages in a batch. On the other hand, this provides an inconsistent view of the data: if another consumer has locked the row and we skip it, but that consumer's transaction eventually rolls back, that message will be lost - i.e. claimed by no consumer. Think of this as a very rare corner case, which we will address later.
+- `select ... for update skip locked` means if a message is in the process of being claimed by another consumer, we'll skip over it without waiting. This makes sense, since chances are it'll be processed by the other consumer anyway and the wait would have been unnecessary. This eliminates row-level lock contention, and will become especially handy once we decide to claim multiple messages in a batch. On the other hand, this provides an inconsistent view of the data: if another consumer has locked the row and we thus skip it, but that consumer's transaction eventually rolls back, that message will be lost - i.e. will not be claimed by any consumer. For now think fo this as a rare corner case, which we will address later.
 
-`markAsSent` and `markAsError` are implemented in the exact same vein.
+Lastly, `markAsSent` and `markAsError` are implemented in the exact same vein, so we will not review them.
+
+## Email sender
+
+We will not be focusing on actual email sending in this article, but we do need at least an interface to work with.
+
+```scala
+trait EmailSender[F[_]]:
+  def sendEmail(id: EmailMessage.Id, email: EmailMessage): F[Unit]
+```
+
+An actual production implementation would require `F: MonadError` in order to `attempt` sending email and handle errors accordingly, and `MonadCancel` and `Temporal` in order to ensure cancellation, timeout capabilities and so on. 
+
+In tests, we'll mostly be using a mock implementation which always succeeds, and collects sent emails for tests to then inspect.
+
+```scala
+package tafto.itest.util
+
+import cats.implicits.*
+import cats.effect.*
+import tafto.domain.EmailMessage
+import tafto.service.comms.EmailSender
+
+final case class RefBackedEmailSender[F[_]: Sync](ref: Ref[F, List[(EmailMessage.Id, EmailMessage)]])
+    extends EmailSender[F]:
+  override def sendEmail(id: EmailMessage.Id, email: EmailMessage): F[Unit] = ref.update(xs => (id, email) :: xs)
+
+  val getEmails: F[List[(EmailMessage.Id, EmailMessage)]] = ref.get.map(_.reverse)
+
+object RefBackedEmailSender:
+  def make[F[_]: Sync]: F[RefBackedEmailSender[F]] =
+    Ref.of(List.empty[(EmailMessage.Id, EmailMessage)]).map { ref =>
+      RefBackedEmailSender(ref)
+    }
+```
+
+### Notes on production implementations
+
+As an aside, we'd still like to say a few words about production implementations of email sending.
+
+**Use HTTP**, and favour a SMTP provider that allows for a REST interface. (AWS SES and SendGrid being two such examples.) A direct SMTP integration, though javax.mail or wrappers, is unfavourable since it's very likely to introduce resource-unsafe and cancellation-unsafe code. Conversely, an integration built on top of `http4s-ember-client` has resource safety built in, uses NIO, has a well-understood threading and connection pooling model and provides tracing and observability.
+
+**Use sane timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
+
+**Consider introducing a retry strategy**. Here's a simple example using `cats-retry`:
+
+```scala
+object EmailSender:
+  def retrying[F[_]: Temporal: Logger](policy: RetryPolicy[F])(underying: EmailSender[F]): EmailSender[F] =
+    (id, email) => Retry.retrying(policy)(underying.sendEmail(id, email))
+```
+
+```scala
+package tafto.service.util
+
+import scala.concurrent.duration.*
+
+import retry.*
+import cats.Applicative
+import cats.effect.Temporal
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.numeric.*
+import io.odin.Logger
+
+object Retry:
+  def fullJitter[F[_]: Applicative](
+      maxRetries: Int :| Positive,
+      baseDelay: FiniteDuration
+  ) = RetryPolicies.limitRetries[F](maxRetries) `join` RetryPolicies.fullJitter(baseDelay)
+
+  def retrying[F[_]: Temporal: Logger, A](policy: RetryPolicy[F])(fa: F[A]): F[A] =
+    retryingOnAllErrors[A](
+      policy = policy,
+      onError = (error: Throwable, _: RetryDetails) => {
+        Logger[F].warn(error.getMessage(), error)
+      }
+    )(fa)
+```
+
+## Tying it all together
+
+Using the persistence layer and email sender above, we're ready for an initial stab at our comms service.
+
+```scala
+package tafto.service.comms
+
+import tafto.domain.*
+import cats.effect.*
+import fs2.Stream
+import cats.data.NonEmptyList
+import cats.implicits.*
+import io.odin.Logger
+
+trait CommsService[F[_]]:
+  // producer
+  def scheduleEmails(messages: NonEmptyList[EmailMessage]): F[List[EmailMessage.Id]]
+  // consumer
+  def run: Stream[F, Unit]
+
+object CommsService:
+  def apply[F[_]: Temporal: Logger](
+      emailMessageRepo: EmailMessageRepo[F],
+      emailSender: EmailSender[F],
+  ): CommsService[F] =
+    new CommsService[F] {
+
+      override def scheduleEmails(messages: NonEmptyList[EmailMessage]): F[List[EmailMessage.Id]] =
+        emailMessageRepo.scheduleMessages(messages)
+
+      override def run: Stream[F, Unit] =
+        emailMessageRepo.listen
+          .evalMap(processMessage)
+          .onFinalize {
+            Logger[F].info("Exiting email consumer stream.")
+          }
+
+      private def processMessage(id: EmailMessage.Id): F[Unit] =
+        for
+          _ <- Logger[F].debug(s"Processing message $id.")
+          maybeMessage <- emailMessageRepo.claim(id)
+          _ <- maybeMessage match
+            case None =>
+              Logger[F].debug(
+                s"Could not claim message $id for sending as it was already claimed by another process, or does not exist."
+              )
+            case Some(message) =>
+              for
+                sendEmailResult <- emailSender.sendEmail(id, message).attempt
+                _ <- sendEmailResult.fold(markAsError(id, _), _ => markAsSent(id))
+              yield ()
+        yield ()
+
+      private def markAsSent(id: EmailMessage.Id): F[Unit] =
+        emailMessageRepo
+          .markAsSent(id)
+          .flatTap {
+            case true => ().pure[F]
+            case false =>
+              Logger[F].warn(
+                s"Duplicate delivery detected. Email message $id sent but already marked by another process."
+              )
+          }
+          .void
+
+      private def markAsError(id: EmailMessage.Id, error: Throwable): F[Unit] =
+        for
+          _ <- Logger[F].error(s"Error when sending message ${id}", error)
+          wasMarked <- emailMessageRepo.markAsError(id, error.getMessage())
+          _ <-
+            if (wasMarked) {
+              ().pure[F]
+            } else {
+              Logger[F].warn(s"Could not mark message $id as error, possible duplicate delivery detected")
+            }
+        yield ()
+    }
+```
+
+This already passes a rudimentary suite of tests. Notably, when running multiple consumers concurrently, duplicate delivery is not observed, so long as there is no service crash in between sending an email and marking it as sent.
 
 
+```scala
+package tafto.itest
+
+import cats.implicits.*
+import scala.concurrent.duration.*
+import cats.effect.*
+import cats.data.NonEmptyList
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.numeric.Positive
+import tafto.persist.*
+import fs2.*
+import weaver.pure.*
+import tafto.service.comms.CommsService
+import tafto.util.*
+import tafto.domain.*
+import tafto.itest.util.*
+import _root_.io.odin.Logger
+
+object CommsServiceDuplicationTest:
+
+  final case class TestCase(
+      messageSize: Int :| Positive,
+      parallelism: Int :| Positive
+  )
+
+  val testCases = List(
+    TestCase(messageSize = 1000, parallelism = 2),
+    TestCase(messageSize = 1000, parallelism = 4),
+    TestCase(messageSize = 1000, parallelism = 8)
+  )
+
+  def tests(db: Database[IO])(using
+      logger: Logger[IO]
+  ): Stream[IO, Test] =
+    seqSuite(
+      testCases.map { testCase =>
+        test(
+          s"CommsService consumer prevents duplicate message delivery (message size = ${testCase.messageSize}, parallelism = ${testCase.parallelism})"
+        ) {
+
+          for
+            chanId <- ChannelId("comms_dedupe_test").asIO
+            emailSender <- RefBackedEmailSender.make[IO]
+
+            emailMessageRepo = PgEmailMessageRepo(db, chanId)
+            commsService = CommsService(emailMessageRepo, emailSender)
+
+            commsServiceConsumerInstances = Stream
+              .emits(List.fill(testCase.parallelism)(commsService.run))
+              .parJoinUnbounded
+
+            result <- useBackgroundStream(commsServiceConsumerInstances) {
+              val msg = EmailMessage(
+                subject = Some("Asdf"),
+                to = List(Email("foo@bar.baz")),
+                cc = List(Email("cc@example.com")),
+                bcc = List(Email("bcc1@example.com"), Email("bcc2@example.com")),
+                body = Some("Hello there")
+              )
+              val messages = NonEmptyList(
+                msg,
+                List.fill(testCase.messageSize - 1)(msg)
+              )
+
+              commsService.scheduleEmails(messages).flatMap { ids =>
+                for {
+                  sentEmails <- emailSender.waitForIdleAndGetEmails(5.seconds)
+                } yield expect(sentEmails.size === testCase.messageSize) `and`
+                  expect(sentEmails.map { case (id, _) => id }.toSet === ids.toSet)
+              }
+            }
+          yield result
+        }
+      }
+    )
+```
+
+# Preventing message loss
