@@ -764,7 +764,7 @@ sql"""
 ```
 
 
-`pollForClaimedMessages` has the same database implementation (using `updatedAt` instead of `createdAt`). Each message is then reprocessed.
+`pollForClaimedMessages` has the same database implementation (using `updatedAt` instead of `createdAt`). Each message is then reprocessed in the same way messages claimed by the non-polling machinery are.
 
 ```scala
 override val pollForClaimedMessages: Stream[F, Unit] =
@@ -775,4 +775,16 @@ override val pollForClaimedMessages: Stream[F, Unit] =
       _ <- claimedIds.traverse(reprocessClaimedMessage)
     yield ()
   }
+
+private def reprocessClaimedMessage(id: EmailMessage.Id): F[Unit] = for
+  msg <- emailMessageRepo.getMessage(id)
+  result <- msg.fold {
+    Logger[F].warn(s"Could not reprocess claimed message with id $id as it was not found")
+  } { case (message, status) =>
+    if status === EmailStatus.Claimed then processClaimedMessage(id, message)
+    else
+      Logger[F].debug(
+        s"Will not reprocess message with id $id as it's no longer claimed, current status is $status"
+      )
+    }
 ```
