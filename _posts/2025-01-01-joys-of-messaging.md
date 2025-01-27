@@ -2,6 +2,8 @@
 title: "The joy of messaging without a message bus"
 date: 2023-12-13T20:00:00Z
 published: true
+toc: true
+toc_sticky: true
 categories:
   - Functional Programming
   - System design
@@ -461,7 +463,7 @@ As an aside, we'd still like to say a few words about production implementations
 
 **Use HTTP**, and favour a SMTP provider that allows for a REST interface. (AWS SES and SendGrid being two such examples.) A direct SMTP integration, though javax.mail or wrappers, is unfavourable since it's very likely to introduce resource-unsafe and cancellation-unsafe code. Conversely, an integration built on top of `http4s-ember-client` has resource safety built in, uses NIO, has a well-understood threading and connection pooling model and provides tracing and observability.
 
-**Use sane timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
+**Use reasonable timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
 
 **Consider introducing a retry strategy**. Here's a simple example using `cats-retry`:
 
@@ -577,7 +579,7 @@ object CommsService:
     }
 ```
 
-This already passes a rudimentary suite of tests. Notably, when running multiple consumers concurrently, duplicate delivery is not observed, so long as there is no service crash in between sending an email and marking it as sent.
+This already passes a rudimentary suite of tests. Notably, when running multiple consumers concurrently, duplicate delivery is not observed, so long as there is no service crash in between sending an email and marking it as sent. We test this out with 2, 4 and 8 concurrent consumers.
 
 
 ```scala
@@ -658,3 +660,119 @@ object CommsServiceDuplicationTest:
 ```
 
 # Preventing message loss
+
+We have a goal to provide eventual at-least-once delivery. To accomplish this, let's think about the possible failure modes in the current implementation resulting in message loss.
+
+**Scheduled messages** might never be claimed in at least the following scenarios:
+
+1. Consumer unavailable: if a message is scheduled while 0 consumers are available, there will be no listeners on the channel and the message won't be claimed
+2. Consumer failure: if an error occurs at consumer-side while attempting to claim a message, and the consumer crashes, that message will never be claimed, unless another consumer is available and able to claim that message
+3. Database server error or failure: we've made sure to send notifications from within a transaction. This does mean notifications won't be sent out unless the transaction succeeds, but there's still the possibility that the transaction is committed, and then the database crashes before sending out the notifications - again, these messages will never be claimed.
+4. Channel failure - it's possible that a notification is published, but never delivered to a consumer's session due to network error.
+
+**Claimed messages** might never be marked, due to either consumer error or database server error. When that happens, we have no mechanism to pick them up again and they will remain claimed and unprocessed indefinitely.
+
+All these can be addressed by introducing a "time to live" for messages in scheduled and claimed states. Those states are non-final in our state machine, and under normal operation a message should remain in them for only so long. If a certain threshold elapses, we can assume that one of the above scenarios occurred and the message needs to be reprocessed.
+
+To do this, at a certain fixed interval we'll query the database for scheduled and claimed messages past their time to live, and reprocess them. This will ensure that eventually every message in the system will either be in either Sent or Error status.
+
+> It's somewhat disappointing that we've had to introduce polling to a system that was fully event-driven. On the upside, polling will always have a 0-message backlog to process under normal operation, which will have negligible performance impact. We'll only do actual work in our polling process when things have gone awry.
+
+Let's introduce a configuration for time to live and polling interval for scheduled but not claimed and claimed but not processed messages:
+
+```scala
+final case class ScheduledMessagesPollingConfig(
+  timeToLive: FiniteDuration,
+  pollingInterval: FiniteDuration
+)
+
+final case class ClaimedMessagesPollingConfig(
+  timeToLive: FiniteDuration,
+  pollingInterval: FiniteDuration
+)
+
+final case class PollingConfig(
+  forScheduled: ScheduledMessagesPollingConfig,
+  forClaimed: ClaimedMessagesPollingConfig
+)
+
+object PollingConfig:
+  val default: PollingConfig = PollingConfig(
+    forScheduled = ScheduledMessagesPollingConfig(
+      timeToLive = 1.minute,
+      pollingInterval = 30.seconds
+    ),
+    forClaimed = ClaimedMessagesPollingConfig(
+      timeToLive = 30.seconds,
+      pollingInterval = 30.seconds
+    )
+  )
+```
+
+These values, especially `timeToLive`, can and should be tweaked in an actual production deployment, according to what latency we expect in the processing of a single message once it's been scheduled. So what happens if we get these values wrong?
+
+- For both scheduled and claimed messages, if we introduce a TTL that's too long, we introduce unwanted latency in the processing of a message - but only for messages which were not delivered by our normal LISTEN / NOTIFY scheme, which will be a rare occurrence anyway
+- For scheduled messages, if we introduce a TTL that's too short, we might mistakenly poll for and claim a message which would have been claimed by the normal scheme. This will introduce extra work, but no other problem, since claiming a message is an idempotent operation under the database implementation we presented above.
+- For claimed messages, if we introduce a TTL that's too short, and mistakenly reprocess a claimed message which was already in the process of being processed, we'll cause **duplicate delivery**. This means we should pick `forClaimed.timeToLive` that's comfortably longer than the typical processing of a claimed message we observe in the system. In practice, this can be achieved by making sure that downstream processing (SMTP) has a reasonable client-side timeout. E.g. `timeToLive = 30.seconds` will in most scenarios be a reasonable timeout if a timeout of `5.seconds` is enforced downstream.
+
+> To the last point, and in any case, duplicate delivery cannot be completely avoided under at-least-once delivery semantics. As a mitigation, later in the article we will introduce and evolve tracing for our system, so we can observe such occurrences and act on them.
+
+With this configuration out of the way, let's extend our comms service with our new polling scheme.
+
+```scala
+trait CommsService[F[_]]:
+
+  // producer
+  def scheduleEmails(messages: NonEmptyList[EmailMessage]): F[List[EmailMessage.Id]]
+
+  // real-time consumer
+  def run: Stream[F, Unit]
+
+  // poll for scheduled messages according to config, and act on them
+  def pollForScheduledMessages: Stream[F, Unit]
+
+  // poll for claimed messages according to config, and act on them
+  def pollForClaimedMessages: Stream[F, Unit]
+
+  // real-time consumer augmented by polling to catch up on any message loss
+  def backfillAndRun(using c: Concurrent[F]): Stream[F, Unit] =
+    Stream(pollForScheduledMessages, pollForClaimedMessages).parJoinUnbounded
+      .concurrently(run)
+```
+
+`pollForScheduledMessages` will retrieve scheduled messages matching our config, and will broadcast them via `NOTIFY` back to the corresponding channel, so they can be picked up by our regular `run` machinery:
+
+```scala
+override val pollForScheduledMessages: Stream[F, Unit] =
+  Stream.fixedRateStartImmediately(pollingConfig.forScheduled.pollingInterval).evalMap { _ =>
+    for
+      now <- Time[F].utc
+      scheduledIds <- emailMessageRepo
+        .getScheduledIds(now.minusNanos(pollingConfig.forScheduled.messageAge.toNanos))
+      _ <- emailMessageRepo.notify(scheduledIds)
+    yield ()
+  }
+```
+
+, where `getScheduledIds` has the underlying query
+```scala
+sql"""
+    select id from email_messages where status = ${emailStatus} and created_at <= ${timestamptz};
+  """
+  .query(emailMessageId)
+  .contramap[OffsetDateTime] { case createdAt => (EmailStatus.Scheduled, createdAt) }
+```
+
+
+`pollForClaimedMessages` has the same database implementation (using `updatedAt` instead of `createdAt`). Each message is then reprocessed.
+
+```scala
+override val pollForClaimedMessages: Stream[F, Unit] =
+  Stream.fixedRateStartImmediately(pollingConfig.forClaimed.pollingInterval).evalMap { _ =>
+    for
+      now <- Time[F].utc
+      claimedIds <- emailMessageRepo.getClaimedIds(now.minusNanos(pollingConfig.forClaimed.timeToLive.toNanos))
+      _ <- claimedIds.traverse(reprocessClaimedMessage)
+    yield ()
+  }
+```
