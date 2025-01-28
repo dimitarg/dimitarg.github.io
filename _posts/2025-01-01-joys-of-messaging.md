@@ -788,3 +788,257 @@ private def reprocessClaimedMessage(id: EmailMessage.Id): F[Unit] = for
       )
     }
 ```
+
+# Assessing initial throughput
+
+The astute reader might have already spotted ample opportunities for optimisation in our initial implementation. Before trying to make things faster, let's first figure out how slow they currently are by creating a load test harness.
+
+We'll start with a load test that collocates the test (producer), code under test (consumer) and database on the same machine, so that it can be easily run on a local development environment without requiring external infrastructure. This is a good enough start to get a feel for performance.
+
+On the other hand, we're aware this approach can skew test results in various ways
+
+- Distribution of available compute resources across the producer, consumer and database might be unfair, for example the service code might hog CPU and underpower the database, or vice versa
+- Eliminating remote networking overhead between the database and the application code might not be representative of a real-world deployment
+
+To address this, we'll make sure our code is modular enough so that the system, database and test can be distributed to separate physical nodes later.
+
+The load test itself will be a simple scala executable. To measure throughput, we'll trace our code via the [`natchez`](https://github.com/typelevel/natchez) tracing library, and store tracing data in [Honeycomb](https://www.honeycomb.io/), where we can aggregate, report and graph our test results.
+
+Local tests will be run on a 12th Gen Intel® Core™ i7-1260P × 16 CPU, with 64GB RAM, running Linux 6.13.0 or newer.
+
+## Tracing
+
+In the current implementation of `CommsService`, each message received is decoded and then processed via `processMessage`. Furthermore, messages are processed in sequence. This means we're mostly interested in tracing `processMessage` and functions it calls, and that the sum of time spent in `processMessage` gives us a very good approximation of the total time the consumer takes to process N messages.
+
+We will create a new root `natchez.Span` for each invocation of `processMessage`. In order to do so, we introduce the type
+```scala
+type SpanLocal[F[_]] = cats.mtl.Local[F, Span[F]]
+```
+, and require `natchez.EntryPoint` and `SpanLocal` constraints when constructing `CommsService`
+
+```scala
+object CommsService:
+  def apply[F[_]: Temporal: Logger: Trace: EntryPoint: SpanLocal]
+```
+
+Now we can trace our function of interest in its own root span.
+
+```scala
+private def processMessage(id: EmailMessage.Id): F[Unit] =
+  val ep = summon[EntryPoint[F]]
+
+  // create a new root span
+  ep.root("processMessage").use { root =>
+    
+    // the program to trace
+    val result = for
+      _ <- Trace[F].put("id" -> id)
+      _ <- Logger[F].debug(s"Processing message $id.")
+      maybeMessage <- emailMessageRepo.claim(id)
+      _ <- maybeMessage match
+        case None =>
+          Logger[F].debug(
+            s"Could not claim message $id for sending as it was already claimed by another process, or does not exist."
+          )
+        case Some(message) =>
+          processClaimedMessage(id, message)
+      yield ()
+
+      // set the program's root span via `cats.mtl.Local.scope`
+      Local[F, Span[F]].scope(result)(root)
+   }
+```
+
+Additionally, we add some tracing info to the functions throughout `PgEmailMessageRepo`, like so
+
+```scala
+override def claim(id: EmailMessage.Id): F[Option[EmailMessage]] =
+  span("claim")("id" -> id) {
+    Time[F].utc.flatMap { now =>
+      updateStatusReturning(UpdateStatus.claim(id, now))
+    }
+  }
+```
+
+These all call into the database using the `skunk` library, which is also traced in very good detail. This gives us enough data to start building our test.
+
+> The `SpanLocal`, `EntryPoint` and `Trace` constraints will be fulfilled by constructing our final program in `Kleisli` instead of plain `IO`
+```scala
+type TracedIO[A] = Kleisli[IO, Span[IO], A]
+```
+
+## Test database
+
+We'll use `testcontainers-scala` in order to provision a database for tests. This will use `docker` under the hood.
+
+First, we need to make sure we're using a recent enough PostgreSQL version
+
+```scala
+val imageName = DockerImageName.parse("postgres:17.1").asCompatibleSubstituteFor("postgres")
+```
+
+Secondly, for performance purposes, `testcontainers` sets PostgreSQL write-ahead log [`fsync`](https://www.postgresql.org/docs/17/runtime-config-wal.html#GUC-FSYNC) option to `off`. This allows for faster database commits at the expense of throwing away data durability guarantees.
+
+This default typically makes sense in unit tests. In our case, it's going to falsify test results, as it's not representative of real-world usage. We need to reset the option back to its default.
+
+```scala
+val container = PostgreSQLContainer(dockerImageNameOverride = imageName)
+container.configure { c =>
+  // as opposed to setCommand("postgres", "-c", "fsync=off");
+  c.setCommand("postgres")
+}
+```
+
+## Email sender
+
+Our test is intended to give an upper bound on system throughput - we won't actually be sending out emails (and if we did, we'd immediately get flagged as spam). To that end, let's provide a stub instance that does nothing and always succeeds.
+
+```scala
+package tafto.loadtest.comms
+
+import cats.Applicative
+import cats.implicits.*
+import tafto.domain.EmailMessage
+import tafto.service.comms.EmailSender
+
+final case class NoOpEmailSender[F[_]: Applicative]() extends EmailSender[F]:
+  override def sendEmail(id: EmailMessage.Id, email: EmailMessage): F[Unit] = ().pure[F]
+
+```
+
+## Load test scenario
+
+Our scenario will 
+- Instantiate a `CommsService` instance for the producer, which will send out 5000 messages. The producer will use its own separate database pool, and its own Honeycomb settings (service name), so that we can differentiate between producer and consumer spans when querying the test results.
+- Instantiate a `CommsService` for the consumer. The consumer will use its own database pool and Honeycomb settings.
+- Start the consumer, by calling `commsService.backfillAndRun`
+- Perform a warmup of the JVM and the consumer and producer database connection pools, by issuing 50 `SELECT 1` statements in parallel for each pool
+- Publish 5000 test messages via the producer
+
+Below is a full listing of the test scenario:
+
+```scala
+package tafto.loadtest.comms
+
+import cats.data.{Kleisli, NonEmptyList}
+import cats.effect.std.UUIDGen
+import cats.effect.{IO, IOApp, Resource}
+import cats.implicits.*
+import io.github.iltotore.iron.*
+import io.odin.Logger
+import natchez.EntryPoint
+import natchez.mtl.given
+import natchez.noop.NoopSpan
+import tafto.db.DatabaseMigrator
+import tafto.domain.*
+import tafto.log.defaultLogger
+import tafto.persist.*
+import tafto.service.comms.CommsService
+import tafto.service.comms.CommsService.PollingConfig
+import tafto.testcontainers.*
+import tafto.util.tracing.*
+
+object CommsServiceLocalLoadTest extends IOApp.Simple:
+
+  given logger: Logger[TracedIO] = defaultLogger
+  given ioLogger: Logger[IO] = defaultLogger
+
+  val makeTestResources: Resource[TracedIO, TestResources] =
+    for
+      // starts the PostgreSQL docker container, making sure `fsync` is not `off`
+      containers <- Containers.make(ContainersConfig.loadTest).mapK(Kleisli.liftK)
+      config = containers.postgres.databaseConfig
+      // applies database schema to the database
+      _ <- Resource.eval(DatabaseMigrator.migrate[TracedIO](config))
+      // connection pool for the producer. 10 max connections in total
+      commsDb <- Database.make[TracedIO](config)
+      // connection pool for the consumer. 10 max connections in total
+      testDb <- Database.make[TracedIO](config)
+      // unique identifier of this test run, so we can query test results for a specific run
+      testRunUUID <- Resource.eval(UUIDGen[TracedIO].randomUUID)
+      tracingGlobalFields = Map("test.uuid" -> testRunUUID.toString())
+
+      // Honeycomb settings for consumer
+      commsEp <- honeycombEntryPoint[TracedIO](
+        serviceName = "tafto-comms",
+        globalFields = tracingGlobalFields
+      )
+      // Honeycomb settings for producer
+      testEp <- honeycombEntryPoint[IO](serviceName = "tafto-load-tests", globalFields = tracingGlobalFields).mapK(Kleisli.liftK)
+
+      channelId <- Resource.eval(PgEmailMessageRepo.defaultChannelId[TracedIO])
+
+      commsService =
+        given EntryPoint[TracedIO] = commsEp
+        val emailRepo = PgEmailMessageRepo(commsDb, channelId)
+        CommsService(emailRepo, new NoOpEmailSender[TracedIO], PollingConfig.default)
+
+      testCommsService =
+        given EntryPoint[TracedIO] = testEp.mapK(Kleisli.liftK)
+        val testEmailRepo = PgEmailMessageRepo(testDb, channelId)
+        CommsService(testEmailRepo, new NoOpEmailSender[TracedIO], PollingConfig.default)
+    yield TestResources(
+      commsService = commsService,
+      commsDb = commsDb,
+      testCommsService = testCommsService,
+      testDb = testDb,
+      testEntryPoint = testEp
+    )
+
+  def publishTestMessages(testResources: TestResources, testSize: Int): IO[Unit] =
+    val msg = EmailMessage(
+      subject = Some("Hello there"),
+      to = List(Email("foo@example.com")),
+      cc = List(Email("bar@example.com")),
+      bcc = List(Email("bar@example.com")),
+      body = Some("General Kenobi!")
+    )
+    val msgs = NonEmptyList(msg, List.fill(testSize - 1)(msg))
+
+    val result = testResources.testCommsService.scheduleEmails(msgs)
+
+    testResources.testEntryPoint.root("scheduleTestMessages").use { span =>
+      result.run(span).void
+    }
+
+  def warmup(db: Database[TracedIO], name: String): IO[Unit] =
+    val healthService = PgHealthService(db)
+    val result = (1 to 50).toList.parTraverse_(_ => healthService.getHealth)
+
+    for
+      _ <- Logger[IO].info(s"Warming up $name")
+      _ <- result.run(NoopSpan())
+      _ <- Logger[IO].info(s"Warmup finished: $name")
+    yield ()
+
+  override def run: IO[Unit] =
+    makeTestResources.mapK(withNoSpan).use { testResources =>
+
+      val warmups = List(
+        warmup(testResources.commsDb, "comms service database pool"),
+        warmup(testResources.testDb, "test database pool")
+      ).parSequence
+
+      val test = testResources.commsService.backfillAndRun.compile.drain.run(NoopSpan()).background.use { handle =>
+        for
+          _ <- Logger[IO].info("publishing test messages ...")
+          _ <- publishTestMessages(testResources, testSize = 5000)
+          _ <- Logger[IO].info("published test messages.")
+          _ <- handle.flatMap(_.embedError)
+        yield ()
+      }
+
+      warmups >> test
+    }
+
+  final case class TestResources(
+    commsDb: Database[TracedIO],
+    commsService: CommsService[TracedIO],
+    testCommsService: CommsService[TracedIO],
+    testDb: Database[TracedIO],
+    testEntryPoint: EntryPoint[IO]
+  )
+```
+
+## Results
+
