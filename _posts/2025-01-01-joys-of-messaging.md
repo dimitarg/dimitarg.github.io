@@ -1042,3 +1042,24 @@ object CommsServiceLocalLoadTest extends IOApp.Simple:
 
 ## Results
 
+On the consumer side, using this query
+
+![alt text](../assets/images/joys-of-messaging/query_sequential_impl.png "consumer query - sequential implementation")
+
+we get
+
+![alt text](../assets/images/joys-of-messaging/result_sequential_impl.png "consumer results - sequential implementation")
+
+On average, we process a single message in 12.3528 ms, so our throughput is 80.95 messages / s. Not impressive at all, but this is our first shot, so we will not despair.
+
+In the producer, there's a single trace / root span which captures all the work, so we don't need to perform any aggregations.
+
+![alt text](../assets/images/joys-of-messaging/query_producer.png "producer query")
+
+We can simply look at that individual trace:
+
+![alt text](../assets/images/joys-of-messaging/result_producer.png "producer results")
+
+Using a database insertion batch size of 500, scheduling 5000 messages took 2681 ms, which means we were producing 1864.9 messages / s.
+
+Out of the total 2681 ms, 1897 ms or 70% of the total time were spent in `NOTIFY`. This confirms our suspicion issuing a notification for each message is not great - and it might be worse in a real deployment, where network latency will be involved.
