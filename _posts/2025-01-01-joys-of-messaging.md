@@ -1212,6 +1212,14 @@ With a few consecutive test runs, we obtain the following results:
 
 Having a pool size of 32, twice the CPU count, seems to be an improvement over a pool size of 10. We'll settle for that for the time being. In a high availability scenario of 2 instances running, that will be 64 connections in total, which gives a comfortable leeway before hitting PostgreSQL's default limit of 100 connections.
 
-We're now seeing consumer throughput of around 1000 messages / s.
+We're now seeing consumer throughput of around 1000 messages / s. 
 
 ## Batching message claiming
+
+An obvious source of inefficiency is the fact we're executing a database query per message
+- To claim the message
+- To mark the message as sent or errored
+
+It should be safe for the consumer to claim multiple messages at once, and then start processing them. If the service crashes before processing the whole batch, any outstanding messages will then be picked up by pollForClaimedMessages. 
+
+The only caveat in claiming a batch of messages is we need to the process the whole batch before its TTL expires, or else we can observe duplicate delivery, once the regularly scheduled `pollForClaimedMessages` kicks in. In other words, it's now the case that `ClaimedMessagesPollingConfig.timeToLive` applies to *the whole batch*.
