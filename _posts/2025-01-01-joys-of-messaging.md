@@ -1,6 +1,6 @@
 ---
 title: "The joy of messaging without a message bus"
-date: 2023-12-13T20:00:00Z
+date: 2025-01-01T20:00:00Z
 published: true
 toc: true
 toc_sticky: true
@@ -1062,4 +1062,111 @@ We can simply look at that individual trace:
 
 Using a database insertion batch size of 500, scheduling 5000 messages took 2681 ms, which means we were producing 1864.9 messages / s.
 
-Out of the total 2681 ms, 1897 ms or 70% of the total time were spent in `NOTIFY`. This confirms our suspicion issuing a notification for each message is not great - and it might be worse in a real deployment, where network latency will be involved.
+Out of the total 2681 ms, 1897 ms or 70% of the total time were spent in `NOTIFY`. This confirms our suspicion issuing notifications in sequence for each message is not great - and it might be worse in a real deployment, where network latency will be involved.
+
+# Improving throughput
+
+## Batching of notifications
+
+To reduce the amount of `NOTIFY` commands we need to issue for a set of messages, we can batch multiple message IDs in a single `NOTIFY` payload. This will also give us the freedom to process a notification batch in parallel in the consumer.
+
+Since `NOTIFY` and `LISTEN` expose a String payload, let's introduce a type to encode and decode data to / from String.
+
+```scala
+trait ChannelEncoder[A]:
+  def encode(a: A): String
+
+trait ChannelDecoder[A]:
+  def decode(x: String): Either[String, A]
+```
+
+For encoding a list of message ids, for now we'll just use a comma-separated representation.
+
+```scala
+object ChannelEncoder:
+  val emailMessageIds: ChannelEncoder[List[EmailMessage.Id]] = xs => xs.mkString(",")
+```
+
+Similarly, to decode, we split the payload into individual segments, decode to int and construct a message id.
+
+```scala
+object ChannelDecoder:
+  val emailMessageIds: ChannelDecoder[Chunk[EmailMessage.Id]] = x =>
+  val segments = x.split(",")
+  Chunk
+    .array(segments)
+    .traverse(segment =>
+      val num = segment.toLongOption.toRight(s"$segment is not an integer.")
+      num.map(n => EmailMessage.Id(n))
+    )
+```
+
+Next, we'll update the type of `EmailMessageRepo.listen` to match the new wire format
+
+```scala
+def listen: Stream[F, Chunk[EmailMessage.Id]]
+```
+
+In `PgEmailMessageRepo`, we implement batching of notifications in LISTEN / NOTIFY. We need to be mindful of batch size since maximum payload size of NOTIFY is limited.
+
+```scala
+// payload must be less than 8000 bytes under default PG configuration
+// long max value is 19 digits, this plus comma separator is 20 bytes in utf-8
+// this means we must send less than 400 messages. 350 leaves some leeway.
+private val notifyBatchSize = 350
+```
+
+If in the future we want to overcome this limitation, we'd need to introduce an intermediate table to store notification payloads, perhaps as JSON.
+
+Let's update the `def listen` and `def notify` implementations:
+
+```scala
+private def notify(s: Session[F], ids: List[EmailMessage.Id]): F[Unit] =
+  span("notify")("payload.size" -> ids.size) {
+    val channel = s.channel(channelId)
+    ids.grouped(notifyBatchSize).toList.traverse_(xs => channel.notify(ChannelEncoder.emailMessageIds.encode(xs)))
+  }
+// ...
+
+override val listen: Stream[F, Chunk[EmailMessage.Id]] =
+  database
+    .subscribeToChannel(channelId)
+    .evalMap { notification =>
+      val payload = notification.value
+      ChannelDecoder.emailMessageIds
+        .decode(payload)
+        .orThrow[F]
+    }
+```
+
+Lastly, `CommsService`:
+
+```scala
+override def run: Stream[F, Unit] =
+  emailMessageRepo.listen
+    .flatMap(xs =>
+      Stream.evalUnChunk(
+        summon[EntryPoint[F]].root("processChunk").use { root =>
+          val result = Trace[F].put("payload.size" -> xs.size) >>
+            xs.parTraverse(processMessage)
+          Local[F, Span[F]].scope(result)(root)
+        }
+      )
+    )
+    .onFinalize {
+      Logger[F].info("Exiting email consumer stream.")
+    }
+```
+
+The root span moves from `processMessage` to `processChunk`, and `processChunk` processes messages in the chunk in parallel. Note `parTraverse` introduces unbounded parallelism, but that's in effect throttled by the underlying database connection pool which is bounded.
+
+Running our test again gives us
+
+- 720 ms in the producer, a throughput of 6944.44 messages / s.
+- A sum of 6789 ms for `processChunk` in the consumer, approximately 736.5 messages / s.
+
+Running `htop` at the time of running the test shows the system is underutilised in terms of CPU and memory. Looking at some of the slowest consumer traces, we reveal a lot of time is spent in `pool.allocate`:
+
+![alt text](pool_allocate.png "span showing time in pool allocate")
+
+This is expected, since `parTraverse` launches a large amount of fibers that end up waiting for database connections. In aggregate, 1,740 *seconds* are spent waiting in `pool.allocate`.  
