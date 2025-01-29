@@ -1167,6 +1167,51 @@ Running our test again gives us
 
 Running `htop` at the time of running the test shows the system is underutilised in terms of CPU and memory. Looking at some of the slowest consumer traces, we reveal a lot of time is spent in `pool.allocate`:
 
-![alt text](pool_allocate.png "span showing time in pool allocate")
+![alt text](../assets/images/joys-of-messaging/pool_allocate.png "span showing time in pool allocate")
 
 This is expected, since `parTraverse` launches a large amount of fibers that end up waiting for database connections. In aggregate, 1,740 *seconds* are spent waiting in `pool.allocate`.  
+
+## Increasing pool size
+
+If the system resources are underutilised, and we see contention for database connections in the consumer, we would expect increasing database pool size to increase throughput, until a certain point. After that, the database sessions themselves will contend for shared resources and throughput will start to decrease again.
+
+Right now database pool size is hardcoded to 10, let's make it configurable.
+
+```scala
+final case class TestConfig(
+  poolSize: Int :| Positive,
+  testPoolSize: Int :| Positive
+)
+
+object TestConfig:
+
+  val load: ConfigValue[Effect, TestConfig] =
+    (
+      env("POOL_SIZE")
+        .as[Int :| Positive]
+        .default(32),
+      env("TEST_POOL_SIZE")
+        .as[Int :| Positive]
+        .default(10)
+    ).mapN { (poolSize, testPoolSize) =>
+      TestConfig(
+        poolSize = poolSize,
+        testPoolSize = testPoolSize
+      )
+    }
+```
+
+With a few consecutive test runs, we obtain the following results:
+
+- 6675 ms aggregate consumer time with pool size = 16
+- 5607 ms, pool size = 32
+- 5452 ms, pool size = 32
+- 4936 ms, pool size = 64
+- 5147 ms, pool size = 64
+- 5124 ms, pool size = 85
+
+Having a pool size of 32, twice the CPU count, seems to be an improvement over a pool size of 10. We'll settle for that for the time being. In a high availability scenario of 2 instances running, that will be 64 connections in total, which gives a comfortable leeway before hitting PostgreSQL's default limit of 100 connections.
+
+We're now seeing consumer throughput of around 1000 messages / s.
+
+## Batching message claiming
