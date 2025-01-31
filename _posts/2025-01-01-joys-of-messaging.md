@@ -1169,7 +1169,7 @@ Running `htop` at the time of running the test shows the system is underutilised
 
 ![alt text](../assets/images/joys-of-messaging/pool_allocate.png "span showing time in pool allocate")
 
-This is expected, since `parTraverse` launches a large amount of fibers that end up waiting for database connections. In aggregate, 1,740 *seconds* are spent waiting in `pool.allocate`.  
+This is expected, since `parTraverse` launches a large amount of fibers that end up waiting for database connections. In aggregate, 1740 *seconds* are spent waiting in `pool.allocate`.  
 
 ## Increasing pool size
 
@@ -1220,6 +1220,196 @@ An obvious source of inefficiency is the fact we're executing a database query p
 - To claim the message
 - To mark the message as sent or errored
 
-It should be safe for the consumer to claim multiple messages at once, and then start processing them. If the service crashes before processing the whole batch, any outstanding messages will then be picked up by pollForClaimedMessages. 
+It should be safe for the consumer to claim multiple messages at once, and then start processing them. If the service crashes before finishing the whole batch, any outstanding messages will then be picked up by `pollForClaimedMessages`, once their TTL expires. 
 
-The only caveat in claiming a batch of messages is we need to the process the whole batch before its TTL expires, or else we can observe duplicate delivery, once the regularly scheduled `pollForClaimedMessages` kicks in. In other words, it's now the case that `ClaimedMessagesPollingConfig.timeToLive` applies to *the whole batch*.
+The caveat in claiming a batch of messages is we need to the process the whole batch before its TTL expires, or else we can observe duplicate delivery, once the regularly scheduled `pollForClaimedMessages` kicks in. In other words, it's now the case that `ClaimedMessagesPollingConfig.timeToLive` applies to *the whole batch*.
+
+First we modify `PgEmailMessageRepo` with the ability to claim multiple messages at once
+
+```scala
+override def claim(ids: NonEmptyList[EmailMessage.Id]): F[List[(EmailMessage.Id, EmailMessage)]] =
+span("claim")("payload.size" -> ids.size) {
+  Time[F].utc.flatMap { now =>
+    val updateStatus = UpdateStatus.claim(now)
+    database.transact { s =>
+      val inputBatches = ids.grouped(Database.batchSize).toList
+      inputBatches
+        .traverse { xs =>
+          s.execute(EmailMessageQueries.updateStatusesReturning(xs.size))(xs.toList, updateStatus)
+        }
+        .map(_.flatten)
+    }
+  }
+}
+```
+
+(The above will execute a single batch in practice, since the notification batch size happens to be smaller than the database batch size).
+
+The updated database query becomes
+
+```scala
+def updateStatusesReturning(n: Int) = sql"""
+  with ids as (
+    select id from email_messages where id in (${emailMessageId.list(n)}) and status=${emailStatus}
+    for update skip locked
+  )
+  update email_messages m set status=${emailStatus}, updated_at=${timestamptz}
+  from ids
+  where m.id = ids.id
+  returning m.id, m.subject, m.to_, m.cc, m.bcc, m.body;
+  """
+    .contramap[(List[EmailMessage.Id], UpdateStatus)] { (xs, x) =>
+      (xs, x.currentStatus, x.newStatus, x.updatedAt)
+    }
+    .query(emailMessageId ~ domainEmailMessageCodec)
+```
+
+As part of the update to `CommsService`, we'll enhance tracing to report on any instances of duplicate delivery. In order to do so, we'll introduce a datatype describing possible message processing outcomes
+
+```scala
+package tafto.service.comms
+
+import tafto.domain.{EmailMessage, EmailStatus}
+
+enum MessageProcessingResult(val id: EmailMessage.Id):
+  // message id could not be claimed - Not an error because it could have been claimed by another process
+  case CouldNotClaim(override val id: EmailMessage.Id) extends MessageProcessingResult(id)
+
+  // message was sent downstream, and was marked successfully. If `error` is present, there was a downstream error.
+  case Marked(override val id: EmailMessage.Id, error: Option[Throwable]) extends MessageProcessingResult(id)
+
+  // message was sent downstream, but was not marked successfully. If `error` is present, there was a downstream error.
+  // This case indicates possible duplicate delivery.
+  case CouldNotMark(override val id: EmailMessage.Id, error: Option[Throwable]) extends MessageProcessingResult(id)
+
+  // message id from claimed messages reprocessing backlog not found. This is an error that indicates a bug in the system.
+  case CannotReprocess_NotFound(override val id: EmailMessage.Id) extends MessageProcessingResult(id)
+
+  // message from claimed messages reprocessing backlog no longer has status claimed. This is not an error as it might
+  // have been reprocessed by another process.
+  case CannotReprocess_NoLongerClaimed(override val id: EmailMessage.Id, newStatus: EmailStatus)
+    extends MessageProcessingResult(id)
+```
+
+We'll update `CommsService` to claim a batch of messages at once; to utilise `MessageProcessingResult` and to log and trace message processing outcomes consistently, in a single place.
+
+```scala
+  def apply[F[_]: Temporal: Parallel: Logger: TraceRoot](
+      emailMessageRepo: EmailMessageRepo[F],
+      emailSender: EmailSender[F],
+      pollingConfig: PollingConfig
+  ): CommsService[F] =
+    new CommsService[F]:
+
+      override def scheduleEmails(messages: NonEmptyList[EmailMessage]): F[NonEmptyList[EmailMessage.Id]] =
+        emailMessageRepo.scheduleMessages(messages)
+
+      override def run: Stream[F, Unit] =
+        emailMessageRepo.listen
+          .flatMap(messages => Stream.evalSeq(processMessages(messages.payload)))
+          .evalMap(traceAndLog)
+          .onFinalize {
+            Logger[F].info("Exiting email consumer stream.")
+          }
+
+      private def processMessages(messageIds: NonEmptyList[EmailMessage.Id]): F[List[MessageProcessingResult]] =
+        TraceRoot[F].inRootSpan("processChunk") {
+          for
+            _ <- Trace[F].put("payload.size" -> messageIds.size)
+            claimedMessages <- emailMessageRepo.claim(messageIds)
+            claimedIds = claimedMessages.map { case (id, _) => id }.toSet
+            notClaimed: List[MessageProcessingResult] = messageIds
+              .filterNot(claimedIds.contains)
+              .map(MessageProcessingResult.CouldNotClaim.apply)
+            results <- claimedMessages.parTraverse { (id, message) =>
+              processClaimedMessage(id, message)
+            }
+            _ <- Trace[F].put("result.size" -> results.size)
+          yield notClaimed ++ results
+        }
+
+      private def processClaimedMessage(id: EmailMessage.Id, message: EmailMessage): F[MessageProcessingResult] =
+        for
+          sendEmailResult <- emailSender.sendEmail(id, message).attempt
+          result <- sendEmailResult.fold(markAsError(id, _), _ => markAsSent(id))
+        yield result
+
+      private def markAsSent(id: EmailMessage.Id): F[MessageProcessingResult] =
+        emailMessageRepo
+          .markAsSent(id)
+          .map {
+            case true  => MessageProcessingResult.Marked(id, error = None)
+            case false => MessageProcessingResult.CouldNotMark(id, error = None)
+          }
+
+      private def markAsError(id: EmailMessage.Id, error: Throwable): F[MessageProcessingResult] =
+        emailMessageRepo.markAsError(id, error.getMessage()).map {
+          case true  => MessageProcessingResult.Marked(id, error = error.some)
+          case false => MessageProcessingResult.CouldNotMark(id, error = error.some)
+        }
+
+      override val pollForScheduledMessages: Stream[F, Unit] =
+        Stream.fixedRateStartImmediately(pollingConfig.forScheduled.pollingInterval).evalMap { _ =>
+          for
+            now <- Time[F].utc
+            scheduledIds <- emailMessageRepo
+              .getScheduledIds(now.minusNanos(pollingConfig.forScheduled.messageAge.toNanos))
+            _ <- NonEmptyList.fromList(scheduledIds).traverse_(emailMessageRepo.notify)
+          yield ()
+        }
+
+      override val pollForClaimedMessages: Stream[F, Unit] =
+        Stream.fixedRateStartImmediately(pollingConfig.forClaimed.pollingInterval).evalMap { _ =>
+          for
+            now <- Time[F].utc
+            claimedIds <- emailMessageRepo.getClaimedIds(now.minusNanos(pollingConfig.forClaimed.timeToLive.toNanos))
+            _ <- claimedIds.traverse_(reprocessClaimedMessage >=> traceAndLog)
+          yield ()
+        }
+
+      private def reprocessClaimedMessage(id: EmailMessage.Id): F[MessageProcessingResult] =
+        TraceRoot[F].inRootSpan("reprocessClaimedMessage") {
+          for
+            msg <- emailMessageRepo.getMessage(id)
+            result <- msg.fold {
+              MessageProcessingResult.CannotReprocess_NotFound(id).pure[F]
+            } { case (message, status) =>
+              if status === EmailStatus.Claimed then processClaimedMessage(id, message)
+              else MessageProcessingResult.CannotReprocess_NoLongerClaimed(id, status).pure[F]
+            }
+          yield result
+        }
+
+      private def traceAndLog(x: MessageProcessingResult): F[Unit] = for
+        _ <- Trace[F].put("id" -> x.id)
+        _ <- x match
+          case MessageProcessingResult.CouldNotClaim(id) =>
+            Trace[F].put("processing.result.type" -> "CouldNotClaim") >>
+              Logger[F].debug(s"Could not claim message $id, it may have been claimed by another process.")
+          case MessageProcessingResult.Marked(id, maybeError) =>
+            Trace[F].put("processing.result.type" -> "Marked") >>
+              maybeError.traverse_(traceAndLogEmailError(id, _))
+          case MessageProcessingResult.CouldNotMark(id, maybeError) =>
+            Trace[F].put("processing.result.type" -> "CouldNotMark") >>
+              maybeError.traverse_(traceAndLogEmailError(id, _)) >>
+              Logger[F].warn(s"Could not mark message $id as processed, possible duplicate delivery detected!")
+          case MessageProcessingResult.CannotReprocess_NotFound(id) =>
+            Trace[F].put("processing.result.type" -> "CannotReprocess_NotFound") >>
+              Logger[F].error(s"Message $id due to be reprocessed was not found!")
+          case MessageProcessingResult.CannotReprocess_NoLongerClaimed(id, newStatus) =>
+            Trace[F].put("processing.result.type" -> "CannotReprocess_NoLongerClaimed") >>
+              Trace[F].put("processing.result.newStatus" -> newStatus.toString()) >>
+              Logger[F].debug(
+                s"Message $id due to be reprocessed is no longer claimed, new status is $newStatus, skipping."
+              )
+      yield ()
+
+      private def traceAndLogEmailError(id: EmailMessage.Id, error: Throwable): F[Unit] = for
+        _ <- Logger[F].warn(s"Error sending email $id", error)
+        _ <- Trace[F].put("email.error" -> error.getMessage())
+      yield ()
+```
+
+We also increase our test size from 5000 to 20000, hopefully smoothing out result variance a bit.
+
+We consume 20000 messages in 5776 ms, a throughput of 3462 messages / s. This is a respectable place to be.
