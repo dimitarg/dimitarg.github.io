@@ -1412,4 +1412,18 @@ We'll update `CommsService` to claim a batch of messages at once; to utilise `Me
 
 We also increase our test size from 5000 to 20000, hopefully smoothing out result variance a bit.
 
-We consume 20000 messages in 5776 ms, a throughput of 3462 messages / s. This is a respectable place to be.
+We consume 20000 messages in 5776 ms, a throughput of 3462 messages / s. This is an above 3x increase from our previous implementation, which is surprising at a first glance, since we cut down the database operations by less than 1/2. I think what's happening is we're seeing the effect of cutting down the **`COMMIT`** operations by around 1/2. And that's the actual heavy bit, since `COMMIT` needs to write to the PG write-ahead log, and physically force those writes to the disk.
+
+> We might be tempted to batch `markAsError` and `markAsSent` in the way we batched message claiming, and get an easy shot of dopamine and yet shinier numbers. I'm reluctant to do that just yet, because I suspect it has the potential to increase duplicate deliveries in the event of service shutdown mid-processing.
+
+# Conclusion and next steps
+
+We've empirically shown that that near-realtime, highly available messaging with at-least-once delivery semantics is feasible on top of just PostgreSQL, and the throughput observed makes the system usable in practice. We're not quite finished yet, though - there's important questions that remain unanswered.
+
+- Our system currently relies on message batching at the producer side in order to achieve the demonstrated throughput. If we instead schedule our message backlog one by one, we will see a drastic decrease. How can we overcome this, and make the system useful in a wider set of scenarios?
+- Related to the above, can we further increase parallelism in the consumer, and how will that impact performance? Right now we employ unbounded parallelism within a notification batch, but each batch is processed sequentially, even when multiple batches are available to process at a given point in time.
+- The latter will pose a new problem in measuring system performance - it's currently the case that total processing time equals the sum of each batch's processing time, but this will no longer be the case if we consume batches in parallel. What changes in tracing do we need to implement to address this?
+- There exist common scenarios which can cause duplicate delivery. In some of these, such as service crash or hardware failure mid-processing, there's nothing we can do. Others, such as graceful `SIGTERM`, need to be looked at and tested.
+- Our load testing infrastructure is pretty basic, as it uses a local development environment, and collocates all components on the same physical machine. It will be useful to employ cloud compute and measure test results there.
+
+Thank you, kind reader, for your time, and stay tuned for the next instalment. Until then, stay curious!
