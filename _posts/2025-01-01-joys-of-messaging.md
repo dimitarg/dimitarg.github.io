@@ -1,5 +1,5 @@
 ---
-title: "The joy of messaging without a message bus"
+title: "The joys of messaging without a message bus"
 date: 2025-01-01T20:00:00Z
 published: true
 toc: true
@@ -31,7 +31,7 @@ If the above description does not fit your usecase, you might still find this ar
 
 # Introduction
 
-I've been out of a contract for a while - tough market, I know - so I was looking for a personal project to brush up on my programming and system design skills, and get industry-grade experience with Scala 3 as well.
+I've been out of a contract for a while - tough market, I know - so I was looking for a personal project to brush up on my programming and system design skills, and get industry-grade experience with Scala 3.
 
 My initial pick was an OAuth / OpenID Connect server implementation, but after faffing about with documentation for a week or so, I started to drown in the 20-ish RFCs involved and realised this would take me around three years, bankrupt me completely and I'd probably lose my ability to communicate with humans in the meantime. For the sake of my financial stability and mental health, I needed a less ambitious goal.
 
@@ -54,7 +54,7 @@ Specifically, there should be no outcome where our system accepts a request to s
 
 Not losing messages is our top priority. Second on the list is near-realtime processing - the recipients should receive their emails shortly after the message sending was requested, for some definition of 'shortly'. Specifically, this means that we can't just use batch processing - i.e. firing up a task that reads unsent messages from the database every five minutes and sends them in bulk is not adequate.
 
-> Note these durability and near-realtime requirements are crucial for emails where we send a specific message to a specific (set of) recipient(s), and where not being able to deliver the email is deemed a major issue. These are often dubbed "transactional emails". As an example, think "Order confirmation", "Payment receipt", "Invoice", "Password reset". A counter-example would be a generic email to many recipients as part of marketing campaign. In that example, depending on the usecase, both the durability and latency requirements might be relaxed. We're only discussing transactional emails in this article. 
+> Note these durability and near-realtime requirements are crucial for emails where we send a specific message to a specific (set of) recipient(s), and where not being able to deliver the email is deemed a system failure. These are often dubbed "transactional emails". As an example, think "Order confirmation", "Payment receipt", "Invoice", "Password reset". A counter-example would be a generic email to many recipients as part of marketing campaign. In that example, depending on the usecase, both the durability and latency requirements might be relaxed. We're only discussing transactional emails in this article. 
 
 To sum up, our usecase demands a system giving us the capability to produce and consume messages in a durable and near-realtime manner. 
 
@@ -66,7 +66,7 @@ A standard and tried approach to implement this usecase is to use a combination 
   - Acknowledges to the message broker the message was processed (in the case of Kafka, by committing the message's offset)
 - Upon error, automatic retrial can occur, but eventually we need to give up, record the message in the database with status "Errored", acknowledge it in the message broker and move on to the next one. These errored messages can then be actioned automatically or manually, either via sourcing them from the database state, or sending them to a "Dead letter queue".
 
-This approach is so standard that I would personally default to it when tasked with building an email comms service. It works, it provides at-least-one delivery semantics (which is the best we can do, since deduplication in general cannot be achieved with SMTP), and via the message broker it provides unbounded horizontal scalability - until the RDBMS or the SMTP service becomes the bottleneck.
+This approach provides at-least-once delivery semantics (which is the best we can do, since deduplication in general cannot be achieved with SMTP), and via the message broker it provides unbounded horizontal scalability - until the RDBMS or the SMTP service becomes the bottleneck.
 
 ## The cost of messaging middleware
 
@@ -105,7 +105,7 @@ Let's roll our own message bus!
 Before setting out to crank out code, it's useful to contemplate what we want to build at a high level, with our specific usecase in mind - delivering transactional email. Here are our goals, in order of importance:
 
 - **At-least-once delivery.** As we pointed out, it should never be the case that the system accepts a message and that message is consequently lost.
-- **Minimise message duplication.** Exactly-once delivery is impossible in distributed systems in general, and certainly so when the downstream protocol does not allow for an idempotency id (which SMTP does not). That being said, we must make an effort to minimise duplication to the extent practically possible. As an example, customers generally freak out when receiving multiple payment confirmations, and that's going to be bad for business.
+- **Minimise message duplication.** Exactly-once delivery is impossible in distributed systems in general, and certainly so when the downstream protocol does not allow for idempotency (which SMTP does not). That being said, we must make an effort to minimise duplication to the extent practically possible. As an example, customers generally freak out when receiving multiple payment confirmations, and that's going to be bad for business.
 - **High availability.** It must be possible to run multiple producers and multiple consumers at the same time safely, so that
   - A single node crashing does not result in service outage
   - Zero-downtime deployments are possible.
@@ -188,7 +188,7 @@ create table email_messages(
 );
 ```
 
-The "created at" field is for audit and monitoring purposes, and the "updated at" one will aid us down the line in ensuring eventual at-least-once delivery.
+The "created at" and "updated at" field are useful for audit and monitoring purposes, and will also aid us down the line in ensuring eventual at-least-once delivery.
 
 ## Database interaction protocol
 
@@ -327,7 +327,7 @@ def insertMessages(size: Int) =
   """.query(emailMessageId)
 ```
 
-Nothing to see here.
+Nothing notable here.
 
 > We're omitting database codecs (`insertEmailEncoder`, `emailMessageId`), and from here on I'll skip any other non-essential details. All the code we'll eventually arrive at is published in a repository linked at the end of this article.
 
@@ -461,11 +461,11 @@ object RefBackedEmailSender:
 
 As an aside, we'd still like to say a few words about production implementations of email sending.
 
-**Use HTTP**, and favour a SMTP provider that allows for a REST interface. (AWS SES and SendGrid being two such examples.) A direct SMTP integration, though javax.mail or wrappers, is unfavourable since it's very likely to introduce resource-unsafe and cancellation-unsafe code. Conversely, an integration built on top of `http4s-ember-client` has resource safety built in, uses NIO, has a well-understood threading and connection pooling model and provides tracing and observability.
+**We want to use HTTP if possible**, and favour a SMTP provider that allows for a REST interface. (AWS SES and SendGrid being two such examples.) A direct SMTP integration, though `javax.mail` or wrappers, is unfavourable since it's very likely to introduce resource-unsafe and cancellation-unsafe code. Conversely, an integration built on top of `http4s-ember-client` has resource safety built in, uses NIO, has a well-understood threading and connection pooling model and provides tracing and observability.
 
-**Use reasonable timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
+**We should use reasonable timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
 
-**Consider introducing a retry strategy**. Here's a simple example using `cats-retry`:
+**We can consider introducing a retry strategy**. Here's a simple example using `cats-retry`:
 
 ```scala
 object EmailSender:
@@ -499,6 +499,8 @@ object Retry:
       }
     )(fa)
 ```
+
+> A production-grade retry strategy will be more involved, differentiating between error cases that are worth retrying and ones which are not. Those will vary depending on your SMTP vendor.
 
 ## Tying it all together
 
