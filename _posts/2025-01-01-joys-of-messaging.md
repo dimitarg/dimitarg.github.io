@@ -19,11 +19,11 @@ This post is under construction.
 
 Depending on the usecase, it's possible to build a production-grade, near-realtime messaging system on top of just PostgreSQL, foregoing messaging middlewares such as Kafka entirely. This will take a certain amount of care, so while it can be simple it might not be that easy. After all, you'd be venturing off the beaten path.
 
-The cost of Kafka and similar software, in terms of operation, complexity and financial overhead is non-negligible, which is what prompted us to look for an alternative.
+The cost of Kafka and similar software, in terms of operation, complexity and financial overhead is non-negligible, which is what prompts us to look for an alternative.
 
 We propose an architecture and sample implementation (in Scala) which might be a good fit if
 
-- You haven't already paid for and invested in a messaging bus
+- You haven't already invested in a messaging bus
 - You already run PostgreSQL
 - Your throughput requirements are far from Google scale - which, statistically speaking, they are.
 
@@ -31,78 +31,86 @@ If the above description does not fit your usecase, you might still find this ar
 
 # Introduction
 
-I've been out of a contract for a while - tough market, I know - so I was looking for a personal project to brush up on my programming and system design skills, and get industry-grade experience with Scala 3.
+With some spare time on my hands, I was looking for a project to brush up on my programming and system design skills, and get experience with Scala 3.
 
-My initial pick was an OAuth / OpenID Connect server implementation, but after faffing about with documentation for a week or so, I started to drown in the 20-ish RFCs involved and realised this would take me around three years, bankrupt me completely and I'd probably lose my ability to communicate with humans in the meantime. For the sake of my financial stability and mental health, I needed a less ambitious goal.
+My initial pick was an OAuth / OpenID Connect server implementation. After faffing about with documentation for a week, I started to drown in the 20-ish RFCs involved and realised this would take me around three years, bankrupt me completely and I'd probably lose my ability to communicate with humans in the meantime. For the sake of my financial stability and mental health, I needed a less ambitious goal.
 
-Had I continued on the path of building an authentication and authorisation provider, one of the next pieces needed would have been a communications service - at the very minimum, something capable of sending emails - for tokens, password resets, security notifications and such. It's an extremely common piece of infrastructure - I'd have to think really hard to come up with a system I've worked on in the past ten years that hasn't had to send email to people.
+That auth server I had abandoned would have required a communications service - at the very minimum, something capable of sending emails for tokens, password resets, security notifications and such. It's an extremely common and well understood piece of infrastructure, so I decided to go with that.
 
-In a comms service, the actual email sending is performed by some sort of SMTP-capable server. It's an interesting topic in itself, since hosting an SMTP server in 2025 that's actually able to deliver email to people and not get rejected or flagged as spam is a surprisingly complicated endeavour. So much so that we usually default to using a managed service, such as Amazon SES, SendGrid, Mailgun, etc. They do come at a non-negligible cost, which goes to tell you you'll probably have a hard time building your own.
+In a comms service, the actual email sending is performed by a SMTP-capable server. It's an interesting topic in itself, since hosting an SMTP server in 2025 that's actually able to deliver email to people and not get rejected or flagged as spam is a surprisingly complicated endeavour. So much so that we usually default to using a managed service, such as Amazon SES, SendGrid, Mailgun, etc. We can try to reinvent those, but pain lies that way.
 
-There's a certain amount of infrastructure surrounding the actual physical email sending, and that's what we'll focus on in this light but lengthy read.
+Instead we'll focus on the application-side machinery surrounding actual email sending.
 
 ## Durability
 
-In a typical comms service, the most important goal is durability. We cannot just shoot out emails into the ether and hope for the best, because that's just sloppy. We need to record the fact. When a request is made to send an emails, there should be two eventual outcomes:
+In a comms service, the most important goal is durability. We cannot just shoot out emails into the ether and hope for the best, because that's just sloppy. We need to record the fact. When a request is made to send an email, there should be two eventual outcomes:
 
-- The email does get sent, and that fact gets recorded in our system, for audit purposes and otherwise;
-- The attempt to send results in an error, and that fact gets recorded, for automated or manual retrial, audit purposes and others.
+- The email does get sent, and that fact gets recorded in our system, so that
+  - We can inspect and audit sent messages, and link them to our business process
+  - We know that message was sent and don't attempt to send it a second time
+- The attempt to send results in an error, and that fact gets recorded, so we can act on it, in a manual or automated manner
 
-Specifically, there should be no outcome where our system accepts a request to send a message, and that fact is forgotten - due to external system error, hardware fault or service shutdown in the midst of processing, or any other reason.
+Specifically, there should be no outcome where our system accepts a request to send a message, and that fact is forgotten - due to external system error, hardware fault, service shutdown in the midst of processing, or any other reason.
 
 ## The case for messaging middleware
 
-Not losing messages is our top priority. Second on the list is near-realtime processing - the recipients should receive their emails shortly after the message sending was requested, for some definition of 'shortly'. Specifically, this means that we can't just use batch processing - i.e. firing up a task that reads unsent messages from the database every five minutes and sends them in bulk is not adequate.
+Not losing messages is our top priority. Second on the list is near-realtime processing - a recipient should receive their email shortly after a message was scheduled, for some definition of 'shortly'. Specifically, this excludes a batch processing implementation. Firing up a task that reads unsent messages from the database every five minutes and sends them in bulk is not adequate.
 
-> Note these durability and near-realtime requirements are crucial for emails where we send a specific message to a specific (set of) recipient(s), and where not being able to deliver the email is deemed a system failure. These are often dubbed "transactional emails". As an example, think "Order confirmation", "Payment receipt", "Invoice", "Password reset". A counter-example would be a generic email to many recipients as part of marketing campaign. In that example, depending on the usecase, both the durability and latency requirements might be relaxed. We're only discussing transactional emails in this article. 
+> These durability and near-realtime requirements are crucial to a usecase where not being able to deliver email is deemed a system failure. These are often dubbed "transactional emails" - examples being "Order confirmation", "Payment receipt", "Invoice", "Password reset". A counter-example would be high-volume messaging to many recipients as part of marketing campaign. In that example, depending on the usecase, both the durability and latency requirements might be relaxed to achieve higher throughput. We're only discussing transactional emails in this article. 
 
 To sum up, our usecase demands a system giving us the capability to produce and consume messages in a durable and near-realtime manner. 
 
 A standard and tried approach to implement this usecase is to use a combination of a relational database and a message-oriented middleware such as Kafka, AWS Kinesis, RabbitMQ or such. Roughly, the scheme is
 
-- Upon receiving a request to send out a set of messages, record those in the database, with a status of "Scheduled";  publish corresponding messages to your message broker of choice; and return to the client that the request was "Accepted";
-- A consumer of that message topic / queue takes messages, attempts to send them to the SMTP-capable server of choice, and upon success
-  - Updates their status in the database to "Processed"
-  - Acknowledges to the message broker the message was processed (in the case of Kafka, by committing the message's offset)
-- Upon error, automatic retrial can occur, but eventually we need to give up, record the message in the database with status "Errored", acknowledge it in the message broker and move on to the next one. These errored messages can then be actioned automatically or manually, either via sourcing them from the database state, or sending them to a "Dead letter queue".
+- Upon receiving a request to send out a set of messages, record those in the database, with some initial status, e.g. "Scheduled". 
+- Then, publish these to your message broker of choice; and return to the client that the request was "Accepted"
+- A consumer of that message topic / queue takes messages, attempts to send them to the SMTP-capable server of choice
+  - Upon success
+    - Update message status in the database to "Processed"
+    - Acknowledges to the message broker the message was processed (in the case of Kafka, by committing the message's offset)
+  -  Upon error, and failing automated retrial
+    - Update message status to "Errored"
+    - acknowledge message in the message broker and move on to the next one.
+    
+The errored messages can then be actioned automatically or manually, either via sourcing them from the database state, or sending them to a "Dead letter queue".
 
-This approach provides at-least-once delivery semantics (which is the best we can do, since deduplication in general cannot be achieved with SMTP), and via the message broker it provides unbounded horizontal scalability - until the RDBMS or the SMTP service becomes the bottleneck.
+This approach provides at-least-once delivery semantics (which is the best we can do, since deduplication in general cannot be achieved with SMTP), and also fulfils our near-realtime requirement by virtue of using a message bus. Typically, by means of the message bus, it also provides unbounded horizontal scalability - until the RDBMS or the SMTP service becomes the bottleneck. 
 
 ## The cost of messaging middleware
 
-Kafka and friends are great, but they come at a a cost. If your organisation is already utilising message middleware, the costs are already being paid, but if you're only introducing it now, you need to acknowledge these.
+Kafka and friends are great, but they come at some costs. If you're only introducing messaging middleware in your system now, you will need to acknowledge the costs:
 
-There's organisational cost: once you introduce message middleware into your architecture, you need everyone on the squad to be familiar with the technology, and at least a few people proficient in it. 
+- **Organisational cost**: you need everyone on the squad to be familiar with the new technology, and at least a few people proficient in it. 
 
-There's complexity cost, as you're introducing an additional distributed system in your stack. This introduces new programming models, new libraries, new failure modes of the system, and new concerns in infrastructure provisioning and operation.
+- **Complexity cost**: you're introducing an additional distributed system in your stack. This introduces new programming models, new libraries, new failure modes of the system, and new concerns in infrastructure provisioning and operation.
 
-There's the direct financial cost. At the time of writing, an entry-level 3-node AWS MSK cluster comes out at circa $600 per month, sans tax. For a large enterprise this amounts to an accounting error, but for a frugal startup it is substantial, especially in the early stages of trying to make a service financially viable.
+- Direct **financial cost**: at the time of writing, an entry-level 3-node AWS MSK cluster comes out at circa $600 per month, sans tax. For a large enterprise this amounts to an accounting error, but for a frugal startup it is substantial, especially in the early stages of trying to make a service financially viable.
 
-Or maybe you're one of the few businesses that already owns their hardware, you've over-provisioned and have the spare resources, and you're willing to operate Kafka on your own, paying the operational cost. This might be a good fit if you already have the expertise. 
+Or maybe you're one of the few businesses that already owns their hardware, you've over-provisioned and have the spare resources, and you're willing to operate Kafka on your own. This might be a good fit if you already have the expertise. 
 
 If not - among other things, you're now in the business of operating a distributed consensus algorithm in production. Congratulations! Just a reminder that your three-node cluster (or six, if you're running Raft on dedicated nodes) that's running fine is one node failure and one network partition away from complete system outage. All this to say, it's not an endeavour to be taken lightly.
 
 ## The Cowboy's way
 
-If we look at the above costs and disagree with paying them, where does that leave us? We're already operating a relational database, so could we build messaging on top of just that?
+If we assessed the above costs and disagreed with paying them, where does that leave us? We're already operating a relational database, so could we build messaging on top of just that? Certainly it's an unorthodox approach; but there's a growing "Just use Postgres" sentiment within our industry, and maybe there's reasoning behind it?
 
-The two major requirements we have towards our solution are durability and near-realtime delivery. And the former is what RDBMS are built for, so that will be no issue.
+The two major requirements we have towards our solution are durability and near-realtime delivery. And the former is what RDBMS are built for, so we've checked that box by construction.
 
-PostgreSQL has a feature called `LISTEN` / `NOTIFY`, which is essentially an asynchronous inter-process communication mechanism. A "producer" can send messages to a notification channel from within a given session (within a transaction or otherwise), and any "consumer" *currently* listening on that channel (again, via a database session) would have those messages broadcasted to them. Effectively, this is a pub-sub system; more precisely a distributed multi-producer, multi-consumer queue.
+PostgreSQL has a feature called `LISTEN` / `NOTIFY`, an asynchronous inter-process communication mechanism. Producers can send messages to a notification channel from within a given session (within a transaction or otherwise), and any consumer *currently* listening on that channel (again, via a database session) will have the messages broadcasted to them. This gives us a distributed multi-producer, multi-consumer queue.
 
-The catch is, this pub-sub mechanism is not persistent / durable, and therefore has no delivery guarantees whatsoever. It does exactly what is advertised in the documentation - broadcast notifications to whoever is listening at the time. There's no persistent log of messages behind that, no acknowledgement protocol such as consumer group commit offsets, no capability to replay messages, etc. Because of that, multiple failure modes come to mind immediately:
+The catch is, this pub-sub mechanism is not persistent / durable, and therefore has no delivery guarantees whatsoever. It does exactly what is advertised in the documentation - broadcast notifications to whoever is listening at the time. There's no append-only log of messages behind that, no acknowledgement protocol, and no capability to replay messages. Because of that, multiple failure modes come to mind immediately:
 
 - If a message gets sent, but consumers that we intended it for are currently down, the message is lost
 - If a message gets delivered to a consumer, and the consumer crashes after receiving the message and before acting on it, the message is lost
 - If a set of messages are to be issued upon commit of a transaction, and the database server crashes after committing the transaction and before sending the messages, the messages are lost
 
-To sum up, our database can provide message durability (but not real-time messaging), and `LISTEN` / `NOTIFY` provides real-time, asynchronous messaging (but no durability by itself). Perhaps if we combined both in a smart way, that would cut it - that's our plan.
+So, our database can provide message durability (but no real-time messaging), and `LISTEN` / `NOTIFY` provides real-time, asynchronous messaging (but no durability). It looks like we need to combine both.
 
-Let's roll our own message bus!
+Let's try to do that.
 
 # Design goals
 
-Before setting out to crank out code, it's useful to contemplate what we want to build at a high level, with our specific usecase in mind - delivering transactional email. Here are our goals, in order of importance:
+Before writing any code, it's useful to be explicit about what we want to build at a high level, with our stated usecase in mind. Here are our goals, in order of importance:
 
 - **At-least-once delivery.** As we pointed out, it should never be the case that the system accepts a message and that message is consequently lost.
 - **Minimise message duplication.** Exactly-once delivery is impossible in distributed systems in general, and certainly so when the downstream protocol does not allow for idempotency (which SMTP does not). That being said, we must make an effort to minimise duplication to the extent practically possible. As an example, customers generally freak out when receiving multiple payment confirmations, and that's going to be bad for business.
@@ -111,13 +119,13 @@ Before setting out to crank out code, it's useful to contemplate what we want to
   - Zero-downtime deployments are possible.
 - We should attempt to optimise the system **throughput**, but not at the expense of any of the above requirements. Specifically, a design which increases throughput while increasing the chances of message duplication is not fit for our goals.
 
-> ... But might be an excellent fit for other usecases. We can imagine a payment processing usecase, where the payment gateway (e.g. Stripe) allows us to specify an external ID for our payment request. If we attempt to place the same payment multiple times, duplicates will be rejected anyway, with no side effect. In this case, a design with massive throughput increase at the cost of slight duplicate message increase might be a desirable one.
+> ... But might be an excellent fit for other usecases. We can imagine a payment processing usecase, where the payment gateway allows us to specify an external ID for our payment request. If we attempt to place the same payment multiple times, duplicates will be rejected downstream, hopefully with no side effect. In such a scenario, a design with massive throughput increase at the cost of slight message duplication increase might be a fit one.
 
 # Tools of choice
 
-Our implementation language of choice will be `Scala`. Necessarily, a number of library choices need to be made - I've went for tried and tested ones which are suitable for production usage. Crucially, we use `skunk` which supports the native PostgreSQL backend / frontend protocol, and has good support for `LISTEN` / `NOTIFY`.
+Our implementation language of choice will be `Scala`. Necessarily, a number of library choices need to be made - I've went for tried and tested ones which are suitable for production usage. Notably, for RDBMS connectivity we use `skunk`, which supports the native PostgreSQL backend / frontend protocol, and has good support for `LISTEN` / `NOTIFY`.
 
-I won't expand much more on the libraries used, lest this article turn into a book. For an overview of them, see [this article](../scala-stack).
+I won't expand more on the libraries used, lest this article turn into a book. For an overview of them, see [this piece](../scala-stack).
 
 # Initial attempt
 
@@ -127,7 +135,7 @@ We'll start with the core data types and SQL model for email messaging.
 
 ## Data model
 
-Email messages have a set of recipients, a subject and a body. For sake of terseness, we won't deal with attachments right now.
+Email messages have a set of recipients, a subject and a body. For the sake of terseness, we won't deal with attachments right now.
 
 ```scala
 final case class EmailMessage(
@@ -139,7 +147,7 @@ final case class EmailMessage(
 )
 ```
 
-For clarity, `NonEmptyString` is a string with a minimum length of 1, enforced through `iron` refinement types.
+Above, `NonEmptyString` is a string with a minimum length of 1, enforced through `iron` refinement types.
 
 ```scala
 type NonEmpty = MinLength[1]
@@ -159,17 +167,17 @@ Once an email message is scheduled for delivery in our system, it gets an unique
 
 ```scala
 object EmailMessage:
-  opaque type Id = Long :| Pure // `Pure` means always True, i.e. just `newtype` over `Long`
+  opaque type Id = Long
 ```
 
-Once an email message is scheduled, it's claimed for processing. The processing can either succeed (the message was accepted by the downstream SMTP server), or it can fail.
+Scheduled messages are claimed for processing by a consumer. The processing can either succeed (the message was accepted by the downstream SMTP server), or it can fail.
 
 ```scala
 enum EmailStatus:
   case Scheduled, Claimed, Sent, Error
 ```
 
-These are all the domain types we'll work with. We need a corresponding PostgreSQL representation:
+These are all the domain types we'll work with.Their corresponding PostgreSQL representation is
 
 ```sql
 create type email_status as enum ('scheduled', 'claimed', 'sent', 'error');
@@ -192,7 +200,7 @@ The "created at" and "updated at" field are useful for audit and monitoring purp
 
 ## Database interaction protocol
 
-Our initial service will consist of two logical components.
+Our service will consist of two logical components.
 
 - A producer, which will be responsible for receiving new email messages (via HTTP endpoint or other programmatic request), scheduling them for sending, and notifying consumers of the new messages via PostgreSQL `NOTIFY`
 - One or many (see "high-availability") consumer processes which receive new messages via `LISTEN`, claim them for processing, and are then responsible to send them out via SMTP, and record the success or failure of that attempt.
@@ -212,16 +220,19 @@ trait EmailMessageRepo[F[_]]:
 
 ```
 
-`scheduleMessages` is what will be called by the producer. This records new messages in the database, and is also responsible for publishing these to the consumer via `NOTIFY`, only upon transaction success.
+`scheduleMessages` is what will be called by the producer. This records new messages in the database, and is also responsible for publishing these to the consumer via `NOTIFY`, upon transaction success.
 
-`listen` is the entry point for the consumer, implemented via PG `LISTEN` (the `Stream` type here is `fs2.Stream`). Then, for each message received, the consumer
-- Attempts to `claim` the message for processing. Note the return type, `F[Option[EmailMessage]]`. Remember there can be multiple consumers running and the message might have already been claimed by another consumer by the time it's received, in which case there's nothing to do and we just move on to the next one.
-- Sends the message downstream (i.e. SMTP), and records that in the database via `markAsSent`. Note the return type, `F[Boolean]`. `false` indicates either this message doesn't exist, or that it's already been marked as sent (or as error) - in the latter case, we've observed more-than-once delivery, which we want to avoid as much as possible.
+`listen` is the entry point for the consumer, implemented via PG `LISTEN`, and modelled as an `fs2.Stream`. Then, for each message received, the consumer
+- Attempts to `claim` the message for processing. Note the return type, `F[Option[EmailMessage]]`. Remember there can be multiple consumers running and the message might have already been claimed by another consumer by the time it's received, in which case there's nothing we need to do, and we can move on to the next one.
+- Sends the message downstream (i.e. SMTP), and records that in the database via `markAsSent`. Note the return type, `F[Boolean]`. `false` indicates either this message doesn't exist, or that it's already been marked as sent (or as error) - in the latter case, we've observed more-than-once delivery.
 - In case of downstream error, we record that in the database via `markAsError`. Again, the return type is `F[Boolean]` and `false` can indicate duplicate delivery.
 
 ## Database internals
 
-First, a small utility layer around `skunk`. This allows us to execute transactions with a bit less boilerplate, gives us a utility function for batch insertion, and to obtain a `LISTEN` subscription where the underlying database session is part of the resulting stream's scope. 
+For completeness, we list a small utility layer around `skunk`. This gives us
+- A function `transact` to execute transactions with a bit less boilerplate
+- A utility function `batched` for batch insertion
+- A function  `subscribeToChannel` to obtain a `LISTEN` subscription, where the underlying database session is part of the resulting stream's scope. 
 
 ```scala
 package tafto.persist
@@ -295,7 +306,7 @@ final case class PgEmailMessageRepo[F[_]: Clock: MonadCancelThrow](
 ) extends EmailMessageRepo[F]:
 ```
 
-`scheduleMessages` is pretty straightforward:
+`scheduleMessages` is straightforward:
 
 ```scala
 override def scheduleMessages(messages: NonEmptyList[EmailMessage]): F[List[EmailMessage.Id]] =
@@ -314,7 +325,7 @@ private def notify(s: Session[F], ids: List[EmailMessage.Id]): F[Unit] =
   ids.traverse_(x => channel.notify(x.show))
 ```
 
-We're using batch insert to schedule messages to increase producer throughput. On the other hand, we've had to publish notifications one by one, which means N network roundtrips for N messages. We'll revise this later.
+We're using batch insert to schedule messages to increase producer throughput. On the other hand, we've had to publish notifications one by one, which means `O(n)` network roundtrips for `n` messages. We'll revise this later.
 
 Then, our actual insert query is
 
@@ -348,9 +359,9 @@ override val listen: Stream[F, EmailMessage.Id] =
 
 Next, on to `claim`, `markAsSent`, and `markAsError`. All these update the `status` of the corresponding DB row, where
 - We should only be able to claim a message if it's currently scheduled
-- Marking a message as error or as success should only go through if the message is currently claimed
+- We should only mark a message as error or as success it's currently claimed
 
-This is a finite state machine, we'll model it with the following datatype
+The above is a finite state machine. We'll model it with the following datatype
 
 ```scala
 final case class UpdateStatus private (
@@ -400,7 +411,7 @@ private def updateStatusReturning(updateStatus: UpdateStatus): F[Option[EmailMes
   }
 ```
 
-The corresponding query we end up with is
+The corresponding query is
 
 ```scala
 val updateStatusReturning = sql"""
@@ -418,21 +429,23 @@ val updateStatusReturning = sql"""
 ```
 
 There's a couple of things above worth expanding on.
-- We only update a row if its id matches **and** it has the expected `currentStatus`, encoding the state machine from above. This helps avoid duplicate claiming, or duplicate marking as sent / error in case of multiple concurrent consumers.
-- `select ... for update skip locked` means if a message is in the process of being claimed by another consumer, we'll skip over it without waiting. This makes sense, since chances are it'll be processed by the other consumer anyway and the wait would have been unnecessary. This eliminates row-level lock contention, and will become especially handy once we decide to claim multiple messages in a batch. On the other hand, this provides an inconsistent view of the data: if another consumer has locked the row and we thus skip it, but that consumer's transaction eventually rolls back, that message will be lost - i.e. will not be claimed by any consumer. For now think fo this as a rare corner case, which we will address later.
+- We only update a row if its `id` matches **and** it has the expected `currentStatus`, encoding the state machine from above. This helps avoid duplicate claiming, or duplicate marking as sent / error in case of multiple concurrent consumers.
+- `select ... for update skip locked` means if a message is in the process of being claimed by another consumer and has a row-level lock on it, we'll skip it without waiting. This makes sense, since chances are it'll be processed by the other consumer anyway and the wait would have been unnecessary. This eliminates row-level lock contention, and will become handy once we decide to claim multiple messages in a batch.
+
+> As pointed out in the `PostgreSQL` documentation, `select ... for update skip locked` can provide an inconsistent view of the data: if another consumer has locked the row and we skip it, but that consumer's transaction does not eventually commit, the message will be lost - i.e. it will not have been claimed by any consumer. We will address this later, together with other message loss scenarios.
 
 Lastly, `markAsSent` and `markAsError` are implemented in the exact same vein, so we will not review them.
 
 ## Email sender
 
-We will not be focusing on actual email sending in this article, but we do need at least an interface to work with.
+We're not focusing on actual email sending in this article. We just need an interface to work with.
 
 ```scala
 trait EmailSender[F[_]]:
   def sendEmail(id: EmailMessage.Id, email: EmailMessage): F[Unit]
 ```
 
-An actual production implementation would require `F: MonadError` in order to `attempt` sending email and handle errors accordingly, and `MonadCancel` and `Temporal` in order to ensure cancellation, timeout capabilities and so on. 
+A production implementation will require `F: MonadError` in order to `attempt` sending email and handle errors accordingly, and `MonadCancel` and `Temporal` in order to ensure cancellation and timeout capabilities.
 
 In tests, we'll mostly be using a mock implementation which always succeeds, and collects sent emails for tests to then inspect.
 
@@ -459,13 +472,13 @@ object RefBackedEmailSender:
 
 ### Notes on production implementations
 
-As an aside, we'd still like to say a few words about production implementations of email sending.
+As an aside, some guidance about production implementations of email sending.
 
-**We want to use HTTP if possible**, and favour a SMTP provider that allows for a REST interface. (AWS SES and SendGrid being two such examples.) A direct SMTP integration, though `javax.mail` or wrappers, is unfavourable since it's very likely to introduce resource-unsafe and cancellation-unsafe code. Conversely, an integration built on top of `http4s-ember-client` has resource safety built in, uses NIO, has a well-understood threading and connection pooling model and provides tracing and observability.
+- **We want to use HTTP if possible**, and favour a SMTP provider that allows for a REST interface. (AWS SES and SendGrid being two such examples.) A direct SMTP integration, though `javax.mail` or wrappers, is unfavourable since it's very likely to introduce resource-unsafe and cancellation-unsafe code. Conversely, an integration built on top of `http4s-ember-client` has resource safety built in, uses NIO, has a well-understood threading and connection pooling model and provides tracing and observability.
 
-**We should use reasonable timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
+- **We should use reasonable timeouts**, so that an intermittent / occasional set of requests exhibiting pathological latency does not grind the whole system to a halt.
 
-**We can consider introducing a retry strategy**. Here's a simple example using `cats-retry`:
+- **We can consider introducing a retry strategy**. Here's a simple example using `cats-retry`:
 
 ```scala
 object EmailSender:
@@ -500,7 +513,9 @@ object Retry:
     )(fa)
 ```
 
-> A production-grade retry strategy will be more involved, differentiating between error cases that are worth retrying and ones which are not. Those will vary depending on your SMTP vendor.
+A production-grade retry strategy will be more involved, differentiating between error cases that are worth retrying and ones which are not. Those will vary depending on your SMTP vendor.
+
+- Depending on the vendor used, your implementation might require client-side **rate limiting**.
 
 ## Tying it all together
 
@@ -672,13 +687,13 @@ We have a goal to provide eventual at-least-once delivery. To accomplish this, l
 3. Database server error or failure: we've made sure to send notifications from within a transaction. This does mean notifications won't be sent out unless the transaction succeeds, but there's still the possibility that the transaction is committed, and then the database crashes before sending out the notifications - again, these messages will never be claimed.
 4. Channel failure - it's possible that a notification is published, but never delivered to a consumer's session due to network error.
 
-**Claimed messages** might never be marked, due to either consumer error or database server error. When that happens, we have no mechanism to pick them up again and they will remain claimed and unprocessed indefinitely.
+Similarly, **claimed messages** might never be marked, due to either consumer error or database server error. When that happens, we have no mechanism to pick them up again and they will remain claimed and unprocessed indefinitely.
 
-All these can be addressed by introducing a "time to live" for messages in scheduled and claimed states. Those states are non-final in our state machine, and under normal operation a message should remain in them for only so long. If a certain threshold elapses, we can assume that one of the above scenarios occurred and the message needs to be reprocessed.
+All these can be addressed by introducing a "time to live" for messages in scheduled and claimed states. The observation being, those states are non-final in our state machine, and under normal operation a message should remain in them for only so long. If a certain threshold elapses, we will assume that one of the above scenarios occurred, and the message needs to be reprocessed.
 
-To do this, at a certain fixed interval we'll query the database for scheduled and claimed messages past their time to live, and reprocess them. This will ensure that eventually every message in the system will either be in either Sent or Error status.
+To do this, at a certain fixed interval we'll query the database for scheduled and claimed messages past their time to live, and reprocess them. This will ensure that, eventually, every message in the system ends up in either Sent or Error status.
 
-> It's somewhat disappointing that we've had to introduce polling to a system that was fully event-driven. On the upside, polling will always have a 0-message backlog to process under normal operation, which will have negligible performance impact. We'll only do actual work in our polling process when things have gone awry.
+> It's somewhat displeasing that we've had to introduce polling to a system that was fully event-driven. On the upside, polling will always have a 0-message backlog to process under normal operation, which will have negligible performance impact. We'll only do actual work in our polling process when things have gone awry.
 
 Let's introduce a configuration for time to live and polling interval for scheduled but not claimed and claimed but not processed messages:
 
@@ -810,7 +825,7 @@ Local tests will be run on a 12th Gen Intel® Core™ i7-1260P × 16 CPU, with 6
 
 ## Tracing
 
-In the current implementation of `CommsService`, each message received is decoded and then processed via `processMessage`. Furthermore, messages are processed in sequence. This means we're mostly interested in tracing `processMessage` and functions it calls, and that the sum of time spent in `processMessage` gives us a very good approximation of the total time the consumer takes to process N messages.
+In the current implementation of `CommsService`, each message received is decoded and then processed via `processMessage`. Furthermore, messages are processed in sequence. This means the sum of time spent in `processMessage` gives us a very good approximation of the total time the consumer takes to process N messages.
 
 We will create a new root `natchez.Span` for each invocation of `processMessage`. In order to do so, we introduce the type
 ```scala
@@ -881,7 +896,7 @@ val imageName = DockerImageName.parse("postgres:17.1").asCompatibleSubstituteFor
 
 Secondly, for performance purposes, `testcontainers` sets PostgreSQL write-ahead log [`fsync`](https://www.postgresql.org/docs/17/runtime-config-wal.html#GUC-FSYNC) option to `off`. This allows for faster database commits at the expense of throwing away data durability guarantees.
 
-This default typically makes sense in unit tests. In our case, it's going to falsify test results, as it's not representative of real-world usage. We need to reset the option back to its default.
+This default only makes sense in unit tests. In our case, it's going to falsify test results, as it's not representative of real-world usage. We need to reset the option back to its default.
 
 ```scala
 val container = PostgreSQLContainer(dockerImageNameOverride = imageName)
@@ -910,11 +925,13 @@ final case class NoOpEmailSender[F[_]: Applicative]() extends EmailSender[F]:
 
 ## Load test scenario
 
-Our scenario will 
-- Instantiate a `CommsService` instance for the producer, which will send out 5000 messages. The producer will use its own separate database pool, and its own Honeycomb settings (service name), so that we can differentiate between producer and consumer spans when querying the test results.
+Our scenario will
+- Spin up a PostgreSQL server via `testcontainers-scala`
+- Apply our database schema to it
+- Instantiate a `CommsService` instance for our message producer. The producer will use its own separate database pool, and its own Honeycomb settings (service name), so that we can differentiate between producer and consumer spans when querying the test results.
 - Instantiate a `CommsService` for the consumer. The consumer will use its own database pool and Honeycomb settings.
 - Start the consumer, by calling `commsService.backfillAndRun`
-- Perform a warmup of the JVM and the consumer and producer database connection pools, by issuing 50 `SELECT 1` statements in parallel for each pool
+- Perform a warmup of the JVM and the consumer and producer database connection pools, by issuing a number of `SELECT 1` statements in parallel for each pool
 - Publish 5000 test messages via the producer
 
 Below is a full listing of the test scenario:
@@ -1414,13 +1431,19 @@ We'll update `CommsService` to claim a batch of messages at once; to utilise `Me
 
 We also increase our test size from 5000 to 20000, hopefully smoothing out result variance a bit.
 
-We consume 20000 messages in 5776 ms, a throughput of 3462 messages / s. This is an above 3x increase from our previous implementation, which is surprising at a first glance, since we cut down the database operations by less than 1/2. I think what's happening is we're seeing the effect of cutting down the **`COMMIT`** operations by around 1/2. And that's the actual heavy bit, since `COMMIT` needs to write to the PG write-ahead log, and physically force those writes to the disk.
+We consume 20000 messages in 5776 ms, a throughput of 3462 messages / s. This is an above 3x increase from our previous implementation, which is surprising at a first glance, since we cut down the database operations by less than 1/2. I think what's happening is we're seeing the effect of cutting down the **`COMMIT`** operations by around 1/2. That part is I/O heavy, since `COMMIT` needs to write to the PG write-ahead log, and physically force those writes to the disk.
 
-> We might be tempted to batch `markAsError` and `markAsSent` in the way we batched message claiming, and get an easy shot of dopamine and yet shinier numbers. I'm reluctant to do that just yet, because I suspect it has the potential to increase duplicate deliveries in the event of service shutdown mid-processing.
+> We might be tempted to batch `markAsError` and `markAsSent` in the way we batched message claiming, and get an easy shot of dopamine and yet shinier numbers. We're reluctant to do that just yet, because we suspect it has the potential to increase duplicate deliveries in the event of service shutdown mid-processing.
 
-# Conclusion and next steps
+# Next steps
 
-We've empirically shown that that near-realtime, highly available messaging with at-least-once delivery semantics is feasible on top of just PostgreSQL, and the throughput observed makes the system usable in practice. We're not quite finished yet, though - there's important questions that remain unanswered.
+So far, we've empirically shown that that near-realtime, highly available messaging with at-least-once delivery semantics is feasible on top of just PostgreSQL.
+
+The throughput observed so far hints the system is usable in a wide set of practical scenarios. I expect we'll be able to increase it further - after all, we've only picked low-hanging fruit so far.
+
+More work remains in the area of performance, as well as correctness. 
+
+In the next episode, we'll try to answer the below questions:
 
 - Our system currently relies on message batching at the producer side in order to achieve the demonstrated throughput. If we instead schedule our message backlog one by one, we will see a drastic decrease. How can we overcome this, and make the system useful in a wider set of scenarios?
 - Related to the above, can we further increase parallelism in the consumer, and how will that impact performance? Right now we employ unbounded parallelism within a notification batch, but each batch is processed sequentially, even when multiple batches are available to process at a given point in time.
