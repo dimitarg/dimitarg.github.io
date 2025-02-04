@@ -1,6 +1,6 @@
 ---
 title: "The joys of messaging without a message bus"
-date: 2025-01-01T20:00:00Z
+date: 2025-02-04T06:00:00Z
 published: true
 toc: true
 toc_sticky: true
@@ -12,8 +12,6 @@ tags:
   - postgres
   - messaging
 ---
-
-This post is under construction.
 
 # Summary
 
@@ -1452,3 +1450,5 @@ In the next episode, we'll try to answer the below questions:
 - Our load testing infrastructure is pretty basic, as it uses a local development environment, and collocates all components on the same physical machine. It will be useful to employ cloud compute and measure test results there.
 
 Thank you, kind reader, for your time, and stay tuned for the next instalment. Until then, stay curious!
+
+*You can find the code presented in this article [here](https://github.com/dimitarg/taftotita/tree/05be95df4d0ad092ef785fa5c156fdfe8f4b1f66). That's commit has `05be95df4d0ad092ef785fa5c156fdfe8f4b1f66`.*
