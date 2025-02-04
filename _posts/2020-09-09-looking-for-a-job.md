@@ -10,7 +10,7 @@ tags:
   - fp
 ---
 
-I'm in the market for a new placement. You can fetch my CV [here](../assets/docs/Dimitar_Georgiev_Resume.pdf).
+I'm in the market for a new placement. You can fetch my CV [here](../assets/docs/Dimitar_Georgiev_Resume.pdf) (Updated Feb 2025).
 
 I am primarily looking at positions where expertise in functional programming is required. The reasons for this are two-fold:
 
