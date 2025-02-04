@@ -1451,4 +1451,4 @@ In the next episode, we'll try to answer the below questions:
 
 Thank you, kind reader, for your time, and stay tuned for the next instalment. Until then, stay curious!
 
-*You can find the code presented in this article [here](https://github.com/dimitarg/taftotita/tree/05be95df4d0ad092ef785fa5c156fdfe8f4b1f66). That's commit has `05be95df4d0ad092ef785fa5c156fdfe8f4b1f66`.*
+*You can find the code presented in this article [here](https://github.com/dimitarg/taftotita/tree/05be95df4d0ad092ef785fa5c156fdfe8f4b1f66). That's commit `05be95df4d0ad092ef785fa5c156fdfe8f4b1f66`.*
